@@ -1,1 +1,26 @@
-a
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176b58">
+  <meta name="description" content="集中整理公平待客與金融友善公開資訊，提供主題觀測、同業比較與週報匯出。">
+  <title>公平待客暨金融友善資訊平台</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./vendor/jszip.js"></script>
+  <script defer src="./vendor/docx.js"></script>
+  <script defer src="./vendor/pptxgen.js"></script>
+  <script defer src="./data.js"></script>
+  <script defer src="./exports.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">前往主要內容</a>
+  <div id="app"></div>
+  <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title"></dialog>
+  <dialog id="form-dialog" class="form-dialog" aria-labelledby="form-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">請開啟 JavaScript，以使用資訊搜尋與週報整理功能。</p></noscript>
+</body>
+</html>
