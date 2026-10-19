@@ -1,5 +1,39 @@
+/* Platform identity and backend mapping. Shared UI files are identical in both repositories. */
 window.PLATFORM_DATA = {
-  "version": 3,
+  "id": "tcf",
+  "title": "公平待客暨金融友善週報",
+  "brand": "公平待客週報",
+  "icon": "book",
+  "authAppName": null,
+  "queue": false,
+  "requiresFacts": true,
+  "requiresUpgrade": true,
+  "summaryLimit": 1200,
+  "maxPerRun": 12,
+  "defaults": {
+    "dailyLimit": 20,
+    "maxPerRun": 6
+  },
+  "collections": {
+    "articles": "articles",
+    "reports": "weeklyReports",
+    "status": "publicStatus",
+    "sources": "sources",
+    "settings": "settings",
+    "runs": "runs",
+    "quotas": null
+  },
+  "functions": {
+    "initialize": "upgradePlatform",
+    "seed": "initializeSources",
+    "collect": "refreshSources",
+    "weekly": "generateWeeklyReport",
+    "pipeline": "setPipeline",
+    "source": "saveSource",
+    "ingest": "ingestArticle",
+    "edit": "editArticle",
+    "visibility": "setArticleReview"
+  },
   "topics": [
     "數位無障礙",
     "高齡友善",
@@ -21,5 +55,11 @@ window.PLATFORM_DATA = {
     "業務人員專業性",
     "友善服務",
     "落實誠信經營"
+  ],
+  "sourceTypes": [
+    "主管機關",
+    "同業公告",
+    "相關機構",
+    "新聞媒體"
   ]
 };

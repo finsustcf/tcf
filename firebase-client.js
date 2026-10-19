@@ -1,36 +1,145 @@
+/* Shared Firebase adapter. Platform-specific names are declared in data.js. */
 (() => {
   'use strict';
-  const listeners=[];
-  const state={user:null,admin:false,loading:true,connected:false,articles:[],archives:[],sources:[],settings:null,lastRun:null,status:null,error:'',range:null,snapshot:null,insights:null};
-  let db,auth,functions,epoch=0,loadId=0;
-  const emit=patch=>{Object.assign(state,patch);listeners.forEach(fn=>fn({...state}));};
-  const normalize=d=>({...d.data(),id:d.id});
-  function friendly(e){const code=e?.code||'';if(code.startsWith('functions/')&&e.message&&!/INTERNAL|not found/i.test(e.message))return e.message;return ({'auth/unauthorized-domain':'此網站尚未加入登入授權網域。','auth/operation-not-allowed':'請先啟用管理者的 Google 登入。','auth/popup-blocked':'請允許登入視窗彈出後重試。','auth/popup-closed-by-user':'登入視窗已關閉。','permission-denied':'資料讀取權限尚未更新，請由管理者部署新版資料庫規則。','failed-precondition':'資料查詢索引仍在建立，請稍後重試。','functions/not-found':'新版後端尚未部署。'})[code]||String(e.message||'暫時無法連線，請稍後重試。').slice(0,300);}
-  async function allPages(query,max=4000){const out=[];let last;while(true){let q=query.limit(200);if(last)q=q.startAfter(last);const snap=await q.get();out.push(...snap.docs.map(normalize));if(out.length>max)throw Error('本次資料超過 4,000 則，請縮短日期範圍後下載。');if(snap.size<200)return out;last=snap.docs[snap.docs.length-1];}throw Error('本次資料超過 4,000 則，請縮短日期範圍後下載。');}
-  async function archives(){if(!db)return [];const result=await db.collection('weeklyReports').orderBy('periodStart','desc').limit(100).get();return result.docs.map(normalize);}
-  async function refreshAdmin(){if(!state.admin)return;const [sources,settings,runs]=await Promise.all([db.collection('sources').limit(100).get(),db.doc('settings/pipeline').get(),db.collection('runs').orderBy('startedAt','desc').limit(1).get()]);emit({sources:sources.docs.map(normalize),settings:settings.exists?settings.data():null,lastRun:runs.empty?null:normalize(runs.docs[0])});}
-  async function loadRange(from,to,{archiveId=null}={}){
-    if(!db)return;const ticket=++loadId;emit({loading:true,error:'',range:{from,to},snapshot:null,insights:null,articles:[]});
-    try{
-      let items,meta=null;const list=await archives();
-      if(archiveId)meta=list.find(x=>x.id===archiveId);else meta=list.find(x=>x.periodStart===from&&x.periodEnd===to);
-      if(archiveId&&!meta)throw Error('這份歷史週報已不存在，請重新整理清單。');
-      if(meta)items=await allPages(db.collection(`weeklyReports/${meta.id}/versions/${meta.activeVersion}/items`).orderBy('order','asc'));
-      else {items=await allPages(db.collection('articles').where('published','==',true).where('reportDate','>=',from).where('reportDate','<=',to).orderBy('reportDate','desc'));if(!items.length&&!list.length){const old=await db.collection('articles').where('published','==',true).orderBy('retrievedAt','desc').limit(200).get();items=old.docs.map(normalize).filter(a=>{const day=ReportUtils.articleDay(a);return day>=from&&day<=to;});}}
-      const status=await db.doc('publicStatus/collection').get();if(ticket!==loadId)return;
-      emit({loading:false,connected:true,articles:ReportUtils.sortArticles(items),archives:list,snapshot:meta,insights:meta?.insights||null,status:status.exists?status.data():null});
-    }catch(e){if(ticket===loadId)emit({loading:false,connected:false,error:friendly(e)});}
+  const D = window.PLATFORM_DATA, T = D.collections, listeners = [];
+  const state = {
+    user: null, admin: false, checkingAdmin: false, loading: true, connected: false,
+    articles: [], archives: [], sources: [], settings: null, runtime: null,
+    quota: null, lastRun: null, status: null, error: '', range: null,
+    snapshot: null, insights: null
+  };
+  let db, auth, functions, epoch = 0, ticket = 0;
+  const emit = patch => {
+    Object.assign(state, patch);
+    listeners.forEach(fn => fn({ ...state }));
+  };
+  const normal = doc => ({ ...doc.data(), id: doc.id });
+  const millis = value => value?.toMillis ? value.toMillis()
+    : value?.seconds != null ? value.seconds * 1000 : Date.parse(value) || 0;
+
+  function friendly(error) {
+    const code = error?.code || '';
+    if (code.startsWith('functions/') && error.message && !/INTERNAL|not found/i.test(error.message)) return error.message;
+    return {
+      'auth/unauthorized-domain': '此網站尚未加入登入授權網域。',
+      'auth/operation-not-allowed': '請啟用管理員的 Google 登入。',
+      'auth/popup-blocked': '請允許登入視窗彈出後重試。',
+      'auth/popup-closed-by-user': '登入視窗已關閉。',
+      'permission-denied': '資料讀取權限尚未設定完成，請由管理員檢查資料庫規則。',
+      'failed-precondition': '查詢索引可能仍在建立，請稍後重試。',
+      'functions/not-found': '對應的平台後端尚未部署完成。'
+    }[code] || String(error.message || '連線未完成，請稍後重試。').slice(0, 300);
   }
-  async function refresh(){const r=state.range||ReportUtils.bounds();await loadRange(r.from,r.to,{archiveId:state.snapshot?.id});if(state.admin)await refreshAdmin();}
-  async function call(name,data={}){if(!functions)throw Error('後端尚未連線。');try{return (await functions.httpsCallable(name,{timeout:540000})(data)).data;}catch(e){throw Error(friendly(e));}}
-  async function signIn(){if(!auth)throw Error('登入元件尚未載入。');try{await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());}catch(e){throw Error(friendly(e));}}
-  async function signOut(){await auth.signOut();}
-  function onState(fn){listeners.push(fn);fn({...state});return()=>listeners.splice(listeners.indexOf(fn),1);}
-  window.PlatformBackend={state,onState,loadRange,refresh,refreshAdmin,call,signIn,signOut,friendly};
-  try{
-    if(!window.firebase||!window.FIREBASE_CONFIG)throw Error('連線元件未載入，請確認網路後重新整理。');
-    const app=firebase.initializeApp(window.FIREBASE_CONFIG);db=app.firestore();auth=app.auth();functions=app.functions(window.PLATFORM_REGION||'asia-east1');
-    const range=ReportUtils.bounds();loadRange(range.from,range.to);
-    auth.onAuthStateChanged(async user=>{const ticket=++epoch;emit({user:user?{uid:user.uid,email:user.email,displayName:user.displayName}:null,admin:false,sources:[],settings:null,lastRun:null});if(!user)return;try{const doc=await db.doc('admins/'+user.uid).get();if(ticket!==epoch)return;emit({admin:doc.exists&&doc.data().enabled===true});if(state.admin)await refreshAdmin();}catch(e){if(ticket===epoch)emit({error:friendly(e)});}});
-  }catch(e){emit({loading:false,error:friendly(e)});}
+
+  async function pages(query, max = 4000) {
+    const items = [];
+    let last;
+    while (true) {
+      let next = query.limit(200);
+      if (last) next = next.startAfter(last);
+      const page = await next.get();
+      items.push(...page.docs.map(normal));
+      if (items.length > max) throw Error('資訊超過 4,000 則，請縮短日期範圍。');
+      if (page.size < 200) return items;
+      last = page.docs[page.docs.length - 1];
+    }
+  }
+
+  async function loadArchives() {
+    const result = await db.collection(T.reports).orderBy('periodStart', 'desc').limit(100).get();
+    return result.docs.map(normal);
+  }
+
+  async function loadRange(from, to, { archiveId = null } = {}) {
+    if (!db) return;
+    const request = ++ticket;
+    emit({ loading: true, error: '', range: { from, to }, snapshot: null, insights: null, articles: [] });
+    try {
+      const [archives, status] = await Promise.all([
+        loadArchives(), db.doc(T.status + '/collection').get()
+      ]);
+      let articles, snapshot = null, insights = null;
+      if (archiveId) {
+        snapshot = archives.find(item => item.id === archiveId);
+        if (!snapshot) throw Error('這份歷史週報已不存在，請重新整理。');
+        articles = await pages(db.collection(`${T.reports}/${snapshot.id}/versions/${snapshot.activeVersion}/items`).orderBy('order', 'asc'));
+        insights = snapshot.insights || null;
+      } else {
+        articles = await pages(db.collection(T.articles).where('published', '==', true)
+          .where('reportDate', '>=', from).where('reportDate', '<=', to).orderBy('reportDate', 'desc'));
+        const matching = archives.find(item => item.periodStart === from && item.periodEnd === to);
+        if (matching && matching.count === articles.length && articles.every(item => millis(item.updatedAt) <= millis(matching.generatedAt))) {
+          insights = matching.insights || null;
+        }
+      }
+      if (request !== ticket) return;
+      emit({ loading: false, connected: true, articles: ReportUtils.sortArticles(articles),
+        archives, status: status.exists ? status.data() : null, snapshot, insights });
+    } catch (error) {
+      if (request === ticket) emit({ loading: false, connected: false, error: friendly(error) });
+    }
+  }
+
+  async function refreshAdmin() {
+    if (!state.admin) return;
+    const request = epoch;
+    const [sources, settings, runtime, quota, runs] = await Promise.all([
+      db.collection(T.sources).limit(100).get(),
+      db.doc(T.settings + '/pipeline').get(),
+      D.queue ? db.doc(T.settings + '/runtime').get() : null,
+      T.quotas ? db.doc(T.quotas + '/' + ReportUtils.today()).get() : null,
+      db.collection(T.runs).orderBy('startedAt', 'desc').limit(1).get()
+    ]);
+    if (request !== epoch || !state.admin) return;
+    emit({ sources: sources.docs.map(normal), settings: settings.exists ? settings.data() : null,
+      runtime: runtime?.exists ? runtime.data() : null, quota: quota?.exists ? quota.data() : null,
+      lastRun: runs.empty ? null : normal(runs.docs[0]) });
+  }
+
+  async function refresh() {
+    const range = state.range || ReportUtils.bounds();
+    await loadRange(range.from, range.to, { archiveId: state.snapshot?.id });
+    if (state.admin) await refreshAdmin();
+  }
+
+  async function call(name, data = {}) {
+    if (!functions) throw Error('後端尚未連線。');
+    if (!Object.values(D.functions).includes(name)) throw Error('函式範圍無效。');
+    try { return (await functions.httpsCallable(name, { timeout: 540000 })(data)).data; }
+    catch (error) { throw Error(friendly(error)); }
+  }
+  async function signIn() {
+    if (!auth) throw Error('登入元件尚未載入。');
+    try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    catch (error) { throw Error(friendly(error)); }
+  }
+  async function signOut() { await auth.signOut(); }
+  function onState(fn) {
+    listeners.push(fn); fn({ ...state });
+    return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
+  }
+  window.PlatformBackend = { state, onState, loadRange, refresh, refreshAdmin, call, signIn, signOut, friendly };
+
+  try {
+    if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
+    const app = D.authAppName ? firebase.initializeApp(window.FIREBASE_CONFIG, D.authAppName)
+      : firebase.initializeApp(window.FIREBASE_CONFIG);
+    db = app.firestore(); auth = app.auth(); functions = app.functions(window.PLATFORM_REGION || 'asia-east1');
+    const range = ReportUtils.bounds();
+    loadRange(range.from, range.to);
+    auth.onAuthStateChanged(async user => {
+      const request = ++epoch;
+      emit({ user: user ? { uid: user.uid, email: user.email } : null, admin: false, checkingAdmin: !!user,
+        sources: [], settings: null, runtime: null, quota: null, lastRun: null });
+      if (!user) return;
+      try {
+        const admin = await db.doc('admins/' + user.uid).get();
+        if (request !== epoch) return;
+        emit({ admin: admin.exists && admin.data().enabled === true, checkingAdmin: false });
+        if (state.admin) await refreshAdmin();
+      } catch (error) {
+        if (request === epoch) emit({ error: friendly(error), checkingAdmin: false });
+      }
+    });
+  } catch (error) { emit({ loading: false, error: friendly(error) }); }
 })();

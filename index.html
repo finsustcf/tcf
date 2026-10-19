@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="tcf">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#99533a">
-  <meta name="description" content="每日整理公平待客與金融友善公開資訊，免登入閱讀，下載 Excel、Word 與 PowerPoint 週報。">
-  <title>公平待客暨金融友善資訊平台</title>
+  <meta name="description" content="公平待客暨金融友善週報公開資訊，支援閱讀、搜尋及 Excel、Word、PowerPoint 下載。">
+  <title>公平待客暨金融友善週報</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20261019-unified1">
   <script defer src="./vendor/jszip.js"></script>
   <script defer src="./vendor/docx.js"></script>
   <script defer src="./vendor/pptxgen.js"></script>
@@ -16,18 +16,18 @@
   <script defer src="https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/13.0.0/firebase-functions-compat.js"></script>
   <script defer src="./firebase-config.js"></script>
-  <script defer src="./data.js"></script>
-  <script defer src="./report-utils.js"></script>
-  <script defer src="./firebase-client.js"></script>
+  <script defer src="./data.js?v=20261019-unified1"></script>
+  <script defer src="./report-utils.js?v=20261019-unified1"></script>
+  <script defer src="./firebase-client.js?v=20261019-unified1"></script>
   <script defer src="./exports.js"></script>
-  <script defer src="./app.js"></script>
+  <script defer src="./app.js?v=20261019-unified1"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">前往主要內容</a>
   <div id="app"></div>
   <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title"></dialog>
-  <dialog id="form-dialog" class="form-dialog" aria-labelledby="form-title"></dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-title"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <noscript><p class="noscript">請開啟 JavaScript，以使用資訊搜尋與週報整理功能。</p></noscript>
+  <noscript>請啟用 JavaScript，以使用搜尋與下載功能。</noscript>
 </body>
 </html>
