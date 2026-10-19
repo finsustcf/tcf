@@ -1,5 +1,5 @@
 window.PLATFORM_DATA = {
-  "version": 2,
+  "version": 3,
   "topics": [
     "數位無障礙",
     "高齡友善",
