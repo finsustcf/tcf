@@ -431,3 +431,17 @@ input,select,textarea{max-width:100%}
 .report-count span{display:inline}
 .news-summary{display:block;overflow:visible}
 }
+
+/* Admin-only recovery list. */
+.settings-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.settings-tabs .period-tab{padding:9px 7px}
+.removed-section>.small-note{margin-bottom:20px}
+.removed-list{display:grid;gap:14px}
+.removed-item{display:flex;align-items:start;gap:18px;padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.removed-copy{flex:1;min-width:0;overflow-wrap:anywhere}
+.removed-copy h3{font-size:20px;margin-bottom:8px}
+.removed-copy>p:not(.news-meta){font-size:17px;line-height:1.8;margin-bottom:9px}
+.removed-copy>a{font-size:16px}
+.removed-item>.btn{flex-shrink:0}
+.removed-empty{padding:30px 10px;color:var(--muted);text-align:center}
+@media(max-width:680px){.settings-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.removed-item{flex-direction:column}.removed-item>.btn{align-self:flex-end}}

@@ -6,9 +6,9 @@
     user: null, admin: false, checkingAdmin: false, loading: true, connected: false,
     articles: [], archives: [], sources: [], settings: null, runtime: null,
     quota: null, lastRun: null, status: null, error: '', range: null,
-    snapshot: null, insights: null
+    snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false
   };
-  let db, auth, functions, epoch = 0, ticket = 0;
+  let db, auth, functions, epoch = 0, ticket = 0, removedRequest = 0, removedCursor = null;
   const emit = patch => {
     Object.assign(state, patch);
     listeners.forEach(fn => fn({ ...state }));
@@ -80,6 +80,28 @@
     }
   }
 
+  // Only admins can query removed articles. Never merge these into public state.
+  async function loadRemoved({ more = false } = {}) {
+    if (!state.admin || (more && state.removedLoading)) return;
+    const request = ++removedRequest, authEpoch = epoch;
+    const prior = more ? state.removed : [];
+    if (!more) removedCursor = null;
+    emit({ removedLoading: true, removedError: '', ...(more ? {} : { removed: [], removedHasMore: false }) });
+    try {
+      let query = db.collection(T.articles).where('published', '==', false).limit(200);
+      if (more && removedCursor) query = query.startAfter(removedCursor);
+      const page = await query.get();
+      if (authEpoch !== epoch || request !== removedRequest || !state.admin) return;
+      if (page.docs.length) removedCursor = page.docs[page.docs.length - 1];
+      const items = [...new Map([...prior, ...page.docs.map(normal)].map(item => [item.id, item])).values()];
+      emit({ removed: items, removedLoading: false, removedHasMore: page.size === 200 });
+    } catch (error) {
+      if (authEpoch === epoch && request === removedRequest && state.admin) {
+        emit({ removedLoading: false, removedError: friendly(error) });
+      }
+    }
+  }
+
   async function refreshAdmin() {
     if (!state.admin) return;
     const request = epoch;
@@ -118,7 +140,7 @@
     listeners.push(fn); fn({ ...state });
     return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
   }
-  window.PlatformBackend = { state, onState, loadRange, refresh, refreshAdmin, call, signIn, signOut, friendly };
+  window.PlatformBackend = { state, onState, loadRange, loadRemoved, refresh, refreshAdmin, call, signIn, signOut, friendly };
 
   try {
     if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
@@ -129,8 +151,10 @@
     loadRange(range.from, range.to);
     auth.onAuthStateChanged(async user => {
       const request = ++epoch;
+      ++removedRequest; removedCursor = null;
       emit({ user: user ? { uid: user.uid, email: user.email } : null, admin: false, checkingAdmin: !!user,
-        sources: [], settings: null, runtime: null, quota: null, lastRun: null });
+        sources: [], settings: null, runtime: null, quota: null, lastRun: null,
+        removed: [], removedLoading: false, removedError: '', removedHasMore: false });
       if (!user) return;
       try {
         const admin = await db.doc('admins/' + user.uid).get();

@@ -31,6 +31,7 @@
   }
   function selectedItems() { return filtered().filter(item => state.selected.has(item.id)); }
   const formatPeriod = () => `${state.from.replaceAll('-', '/')} – ${(state.from.slice(0, 4) === state.to.slice(0, 4) ? state.to.slice(5) : state.to).replaceAll('-', '/')}`;
+  const scopeLabel = () => ({ previous: '上週', current: '本週', custom: '所選期間', archive: '該週' }[state.mode]);
   const modeLabel = () => ({ previous: '上週週報', current: '本週資訊', custom: '自訂期間', archive: '歷史週報' }[state.mode]);
   function time(value) {
     if (!value) return '尚未更新';
@@ -62,7 +63,7 @@
       </div><div class="export-area"><p class="export-label" id="export-label" aria-live="polite"></p><div class="export-buttons">
       ${[['xlsx', 'Excel'], ['docx', 'Word'], ['pptx', 'PowerPoint']].map(([format, label]) => `<button class="btn export-btn" data-action="export" data-format="${format}">${icon('download')}${label}</button>`).join('')}
       </div></div></section><section class="highlights" id="highlights" aria-labelledby="highlights-title"></section>
-      <section aria-labelledby="list-title"><div class="section-heading"><h2 id="list-title">資訊列表</h2><div class="list-heading-actions"><p id="result-count" role="status" aria-live="polite"></p><button class="text-btn" data-action="reload">重新讀取</button></div></div>
+      <section aria-labelledby="list-title"><div class="section-heading"><h2 id="list-title">${scopeLabel()}資訊</h2><div class="list-heading-actions"><p id="result-count" role="status" aria-live="polite"></p><button class="text-btn" data-action="reload">重新讀取</button></div></div>
       <form class="filter-form" id="filter-form" role="search"><label class="search-field"><span class="sr-only">搜尋標題、摘要或來源</span>${icon('search')}<input id="search-input" type="search" placeholder="搜尋標題、摘要或來源" value="${esc(state.search)}" autocomplete="off"></label>
       <label><span class="sr-only">篩選主題</span><select id="topic-filter"><option value="">全部主題</option>${D.topics.map(topic => `<option ${state.topic === topic ? 'selected' : ''}>${esc(topic)}</option>`).join('')}</select></label>
       <label><span class="sr-only">篩選來源地區</span><select id="region-filter"><option value="">國內外來源</option><option ${state.region === '國內' ? 'selected' : ''}>國內</option><option ${state.region === '國外' ? 'selected' : ''}>國外</option><option value="unknown" ${state.region === 'unknown' ? 'selected' : ''}>未標示</option></select></label></form>
@@ -79,7 +80,7 @@
     const observations = B().insights?.insights || [], items = U.sortArticles(periodItems()).slice(0, 3);
     const content = observations.length ? observations.slice(0, 3).map((item, index) => `<div class="highlight"><span class="highlight-number">${String(index + 1).padStart(2, '0')}</span><span class="highlight-copy"><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p></span></div>`).join('')
       : items.map((item, index) => `<button class="highlight" data-action="detail" data-id="${esc(item.id)}"><span class="highlight-number">${String(index + 1).padStart(2, '0')}</span><span class="highlight-copy"><strong>${esc(item.title)}</strong><p>${esc(item.implication || item.summary)}</p></span>${icon('arrow')}</button>`).join('');
-    $('highlights').innerHTML = content ? `<div class="section-heading"><h2 id="highlights-title">本期重點</h2></div><div class="highlight-list">${content}</div>` : '';
+    $('highlights').innerHTML = content ? `<div class="section-heading"><h2 id="highlights-title">${scopeLabel()}重點</h2></div><div class="highlight-list">${content}</div>` : '';
   }
   function renderList() {
     const all = periodItems(), items = filtered();
@@ -122,7 +123,7 @@
   }
   function renderHistory() {
     const error = B().error;
-    $('main-content').innerHTML = `<div class="history-heading"><h1>歷史週報</h1><p>選擇期間後，可閱讀與下載該期封存內容。</p></div>${error ? `<div class="empty-state"><h3>暫時無法讀取週報</h3><p>${esc(error)}</p><button class="btn" data-action="reload">重新讀取</button></div>` : B().archives.length ? `<div class="history-list">${B().archives.map(item => `<button class="history-card" data-action="archive" data-id="${esc(item.id)}" data-from="${esc(item.periodStart)}" data-to="${esc(item.periodEnd)}">${icon('archive')}<span class="history-copy"><strong>${esc(U.period(item.periodStart, item.periodEnd))}</strong><p>${item.count || 0} 則資訊・產製 ${time(item.generatedAt)}</p></span><span class="history-open">閱讀週報${icon('arrow')}</span></button>`).join('')}</div>` : `<div class="empty-state"><h3>${B().loading ? '讀取週報中…' : '尚無封存週報'}</h3><p>每週一早上整理上一週內容。</p></div>`}`;
+    $('main-content').innerHTML = `<div class="history-heading"><h1>歷史週報</h1><p>選擇期間後，可閱讀與下載該週封存內容。</p></div>${error ? `<div class="empty-state"><h3>暫時無法讀取週報</h3><p>${esc(error)}</p><button class="btn" data-action="reload">重新讀取</button></div>` : B().archives.length ? `<div class="history-list">${B().archives.map(item => `<button class="history-card" data-action="archive" data-id="${esc(item.id)}" data-from="${esc(item.periodStart)}" data-to="${esc(item.periodEnd)}">${icon('archive')}<span class="history-copy"><strong>${esc(U.period(item.periodStart, item.periodEnd))}</strong><p>${item.count || 0} 則資訊・產製 ${time(item.generatedAt)}</p></span><span class="history-open">閱讀週報${icon('arrow')}</span></button>`).join('')}</div>` : `<div class="empty-state"><h3>${B().loading ? '讀取週報中…' : '尚無封存週報'}</h3><p>每週一早上整理上一週內容。</p></div>`}`;
   }
   function showDialog(node) { returnFocus = document.activeElement; if (!node.open) node.showModal(); node.scrollTop = 0; }
   function close(node) { node.close(); }
@@ -159,6 +160,13 @@
     let content;
     if (state.settingsTab === 'sources') {
       content = `<section class="source-group"><h3>主管機關、同業與相關機構</h3>${sourceRows(false)}<h3>新聞媒體</h3>${sourceRows(true)}<div class="settings-actions"><button class="btn" data-action="seed-sources" ${state.busy ? 'disabled' : ''}>補齊預設來源</button></div><details class="advanced-settings"><summary>新增來源</summary>${sourceForm()}</details></section>`;
+    } else if (state.settingsTab === 'removed') {
+      const items = backend.removed || [];
+      content = `<section class="removed-section"><div class="section-heading"><h3>已移除資訊</h3><button class="text-btn" data-action="reload-removed" ${backend.removedLoading || state.busy ? 'disabled' : ''}>重新讀取</button></div><p class="small-note">這些資訊未公開顯示；還原後會回到原發布日期所屬的期間。歷史封存週報不會自動改寫。</p>
+        ${backend.removedError ? `<p class="form-error" role="alert">${esc(backend.removedError)}</p>` : ''}
+        ${items.length ? `<div class="removed-list">${items.map(item => `<article class="removed-item"><div class="removed-copy"><p class="news-meta">${esc(item.date || U.articleDay(item) || '日期未標示')}・${esc(item.source)}</p><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><a href="${esc(U.safeURL(item.url))}" target="_blank" rel="noopener noreferrer">查看原文</a></div><button class="btn" data-action="restore" data-id="${esc(item.id)}" ${state.busy || backend.removedLoading ? 'disabled' : ''}>還原</button></article>`).join('')}</div>` : !backend.removedLoading && !backend.removedError ? '<p class="removed-empty">目前沒有已移除的資訊。</p>' : ''}
+        ${backend.removedLoading ? '<p class="loading" role="status">讀取已移除資訊中…</p>' : ''}
+        ${backend.removedHasMore ? `<button class="btn" data-action="more-removed" ${backend.removedLoading || state.busy ? 'disabled' : ''}>載入更多已移除資訊</button>` : ''}</section>`;
     } else if (state.settingsTab === 'add') {
       content = articleForm();
     } else {
@@ -169,7 +177,7 @@
         <details class="advanced-settings"><summary>更新用量設定</summary><form id="pipeline-form" class="stack-form"><label class="field">每日最多分析次數<input name="dailyLimit" type="number" min="1" max="100" required value="${settings.dailyLimit || D.defaults.dailyLimit}"></label><label class="field">每次更新最多處理筆數<input name="maxPerRun" type="number" min="1" max="${D.maxPerRun}" required value="${settings.maxPerRun || D.defaults.maxPerRun}"></label>${D.queue ? `<label class="field">追蹤最近幾天的資訊<input name="lookbackDays" type="number" min="7" max="60" required value="${settings.lookbackDays || 21}"></label>` : ''}<p class="small-note">${backend.quota ? '今日已呼叫 ' + (backend.quota.calls || 0) + ' 次。' : ''}此為平台自己的分析上限，Gemini 實際額度依專案而定；下載不會重新分析。</p><p class="form-error" id="form-error" role="alert"></p><button class="btn" ${state.busy ? 'disabled' : ''}>儲存設定</button></form></details>
         ${D.queue ? `<details class="advanced-settings"><summary>處理未完成資訊</summary><p class="small-note">額度或來源讀取受限時，資訊會保留等待後續處理；失敗項目可重新排入。</p><button class="btn" data-action="retry-queue" ${state.busy ? 'disabled' : ''}>重試失敗項目</button></details>` : ''}</section>`;
     }
-    $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['sources', '資訊來源'], ['add', '新增資訊']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
+    $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
     showDialog($('settings-dialog'));
   }
   async function task(action, data, message) {
@@ -179,6 +187,7 @@
     try {
       const result = await window.PlatformBackend.call(D.functions[action], data);
       await window.PlatformBackend.refresh();
+      if (state.settingsTab === 'removed' && B().admin) await window.PlatformBackend.loadRemoved();
       toast(typeof message === 'function' ? message(result) : message);
       if ($('settings-dialog').open && B().admin) settingsDialog();
       return result;
@@ -193,7 +202,7 @@
   function payload() {
     const articles = (state.selected.size ? selectedItems() : filtered()).map(U.reportArticle);
     return { title: D.title, from: state.from, to: state.to, period: U.period(state.from, state.to), articles,
-      topics: U.topics(articles), introduction: U.overview(articles),
+      topics: U.topics(articles), introduction: U.overview(articles, scopeLabel()), sectionLabel: scopeLabel(),
       insights: state.selected.size || state.search || state.topic || state.region ? null : B().insights };
   }
   async function download(format) {
@@ -205,7 +214,7 @@
     finally { state.busy = false; if (state.page === 'weekly') renderSelection(); }
   }
 
-  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'retry-queue', 'seed-sources', 'toggle-source', 'edit', 'hide']);
+  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'retry-queue', 'seed-sources', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed']);
   document.addEventListener('click', async event => {
     const button = event.target.closest('[data-action]'); if (!button) return;
     event.preventDefault(); const action = button.dataset.action, id = button.dataset.id;
@@ -228,7 +237,10 @@
       case 'clear-selection': state.selected.clear(); renderList(); break;
       case 'reload': await window.PlatformBackend.refresh(); break;
       case 'account': account(); break;
-      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); break;
+      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
+      case 'reload-removed': await window.PlatformBackend.loadRemoved(); break;
+      case 'more-removed': await window.PlatformBackend.loadRemoved({ more: true }); break;
+      case 'restore': if ((B().removed || []).some(item => item.id === id)) await task('visibility', { id, published: true }, '資訊已還原，可切換至原發布日期查看。'); break;
       case 'close-settings': close($('settings-dialog')); break;
       case 'copy-uid': try { await navigator.clipboard.writeText(B().user.uid); toast('UID 已複製。'); } catch { toast('請選取 UID 欄位並複製。'); } break;
       case 'logout': close($('settings-dialog')); await window.PlatformBackend.signOut(); break;
@@ -240,7 +252,14 @@
       case 'retry-queue': await task('retry', {}, result => `已重新排入 ${result.requeued || 0} 則失敗項目。按「立即更新」可處理已到重試時間的資訊。`); break;
       case 'toggle-source': { const source = B().sources.find(item => item.id === id); if (source) await task('source', { ...source, enabled: !source.enabled }, '來源設定已更新。'); break; }
       case 'edit': { const item = B().articles.find(article => article.id === id); if (!item || B().snapshot) return; close($('detail-dialog')); $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉編輯">${icon('close')}</button><h2 class="dialog-title" id="settings-title">編輯資訊</h2>${articleForm(item)}`; showDialog($('settings-dialog')); break; }
-      case 'hide': if (!B().snapshot) { close($('detail-dialog')); await task('visibility', { id, published: false }, '資訊已從目前列表移除，歷史封存內容維持原樣。'); } break;
+      case 'hide': {
+        const item = B().articles.find(article => article.id === id);
+        if (!item || B().snapshot) break;
+        if (!window.confirm(`要將「${item.title}」從公開列表與後續下載移除嗎？\n\n資料不會永久刪除，可在「管理設定 → 已移除資訊」還原。已封存的歷史週報與已下載檔案維持原內容。`)) break;
+        close($('detail-dialog'));
+        await task('visibility', { id, published: false }, '資訊已移除；若為誤按，可到「管理設定 → 已移除資訊」還原。');
+        break;
+      }
     }
   });
   document.addEventListener('input', event => {
@@ -293,6 +312,7 @@
       if ($('detail-dialog').open) $('detail-dialog').close();
     }
     previousUID = B().user?.uid || null; previousAdmin = B().admin;
+    if ($('settings-dialog').open && B().admin && state.settingsTab === 'removed') settingsDialog();
     if (accountRequested && B().user && !B().checkingAdmin) { accountRequested = false; account(); }
   });
 })();
