@@ -1,14 +1,13 @@
-/* Platform identity and backend mapping. Shared UI files are identical in both repositories. */
 window.PLATFORM_DATA = {
   "id": "tcf",
   "title": "公平待客暨金融友善週報",
   "brand": "公平待客週報",
   "icon": "book",
   "authAppName": null,
-  "queue": false,
-  "requiresFacts": true,
-  "requiresUpgrade": true,
-  "summaryLimit": 1200,
+  "queue": true,
+  "requiresFacts": false,
+  "requiresUpgrade": false,
+  "summaryLimit": 1400,
   "maxPerRun": 12,
   "defaults": {
     "dailyLimit": 20,
@@ -21,7 +20,8 @@ window.PLATFORM_DATA = {
     "sources": "sources",
     "settings": "settings",
     "runs": "runs",
-    "quotas": null
+    "quotas": null,
+    "knowledge": "knowledge"
   },
   "functions": {
     "initialize": "upgradePlatform",

@@ -5,9 +5,10 @@
   const state = {
     user: null, admin: false, checkingAdmin: false, loading: true, connected: false,
     articles: [], archives: [], sources: [], settings: null, runtime: null,
-    quota: null, lastRun: null, status: null, error: '', range: null,
-    snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false
+    quota: null, lastRun: null, status: null, error: '', range: null, relatedIds: null,
+    knowledge: [], knowledgeLoading: false, knowledgeError: '', knowledgeLoaded: false, snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false
   };
+  let knowledgeTicket = 0;
   let db, auth, functions, epoch = 0, ticket = 0, removedRequest = 0, removedCursor = null;
   const emit = patch => {
     Object.assign(state, patch);
@@ -53,7 +54,7 @@
   async function loadRange(from, to, { archiveId = null } = {}) {
     if (!db) return;
     const request = ++ticket;
-    emit({ loading: true, error: '', range: { from, to }, snapshot: null, insights: null, articles: [] });
+    emit({ loading: true, error: '', range: { from, to }, relatedIds: null, knowledge: [], knowledgeLoading: false, knowledgeError: '', knowledgeLoaded: false, snapshot: null, insights: null, articles: [] });
     try {
       const [archives, status] = await Promise.all([
         loadArchives(), db.doc(T.status + '/collection').get()
@@ -102,6 +103,25 @@
     }
   }
 
+  async function loadKnowledge() {
+    if (!db || state.knowledgeLoading) return;
+    const request = ++knowledgeTicket; emit({ knowledgeLoading: true, knowledgeError: '' });
+    try {
+      const items = await pages(db.collection(T.knowledge).where('published', '==', true));
+      if (request !== knowledgeTicket) return;
+      emit({ knowledge: items.sort((a,b) => a.term.localeCompare(b.term,'zh-TW')), knowledgeLoading: false, knowledgeLoaded: true });
+    } catch (error) { if (request === knowledgeTicket) emit({ knowledgeLoading: false, knowledgeError: friendly(error) }); }
+  }
+
+  async function loadRelated(ids) {
+    const request=++ticket;emit({loading:true,error:'',articles:[],snapshot:null,insights:null,relatedIds:ids});
+    try {
+      const valid=[...new Set(ids||[])].filter(id=>/^[a-f0-9]{64}$/.test(id)).slice(-120),items=[];
+      for(let i=0;i<valid.length;i+=20){const page=await db.collection(T.articles).where(firebase.firestore.FieldPath.documentId(),'in',valid.slice(i,i+20)).where('published','==',true).limit(200).get();items.push(...page.docs.map(normal));}
+      if(request===ticket)emit({articles:ReportUtils.sortArticles(items),loading:false,connected:true,range:null});
+    }catch(error){if(request===ticket)emit({loading:false,error:friendly(error)});}
+  }
+
   async function refreshAdmin() {
     if (!state.admin) return;
     const request = epoch;
@@ -119,6 +139,7 @@
   }
 
   async function refresh() {
+    if(state.relatedIds){await loadRelated(state.relatedIds);if(state.admin)await refreshAdmin();return;}
     const range = state.range || ReportUtils.bounds();
     await loadRange(range.from, range.to, { archiveId: state.snapshot?.id });
     if (state.admin) await refreshAdmin();
@@ -140,7 +161,7 @@
     listeners.push(fn); fn({ ...state });
     return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
   }
-  window.PlatformBackend = { state, onState, loadRange, loadRemoved, refresh, refreshAdmin, call, signIn, signOut, friendly };
+  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, refresh, refreshAdmin, call, signIn, signOut, friendly };
 
   try {
     if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
