@@ -21,7 +21,8 @@ window.PLATFORM_DATA = {
     "settings": "settings",
     "runs": "runs",
     "quotas": null,
-    "knowledge": "knowledge"
+    "knowledge": "knowledge",
+    "feedback": "feedback"
   },
   "functions": {
     "initialize": "upgradePlatform",
@@ -32,7 +33,10 @@ window.PLATFORM_DATA = {
     "source": "saveSource",
     "ingest": "ingestArticle",
     "edit": "editArticle",
-    "visibility": "setArticleReview"
+    "visibility": "setArticleReview",
+    "feedback": "saveSource",
+    "permanentDelete": "setArticleReview",
+    "compact": "generateWeeklyReport"
   },
   "topics": [
     "數位無障礙",

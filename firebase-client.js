@@ -6,7 +6,7 @@
     user: null, admin: false, checkingAdmin: false, loading: true, connected: false,
     articles: [], archives: [], sources: [], settings: null, runtime: null,
     quota: null, lastRun: null, status: null, error: '', range: null, relatedIds: null,
-    knowledge: (D.knowledgeSeeds||[]).map(x=>({...x})), knowledgeLoading: false, knowledgeError: '', knowledgeLoaded: false, snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false
+    knowledge: (D.knowledgeSeeds||[]).map(x=>({...x})), knowledgeLoading: false, knowledgeError: '', knowledgeLoaded: false, snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false, feedback: [],feedbackLoading:false,feedbackError:''
   };
   let knowledgeTicket = 0;
   let db, auth, functions, epoch = 0, ticket = 0, removedRequest = 0, removedCursor = null;
@@ -123,6 +123,11 @@
     }catch(error){if(request===ticket)emit({loading:false,error:friendly(error)});}
   }
 
+  async function loadFeedback(){
+    if(!state.admin||!db)return;const request=epoch;emit({feedbackLoading:true,feedbackError:''});
+    try{const page=await db.collection(T.feedback).orderBy('createdAt','desc').limit(100).get();if(request===epoch&&state.admin)emit({feedback:page.docs.map(normal),feedbackLoading:false});}
+    catch(e){if(request===epoch&&state.admin)emit({feedbackLoading:false,feedbackError:friendly(e)});}
+  }
   async function refreshAdmin() {
     if (!state.admin) return;
     const request = epoch;
@@ -162,7 +167,7 @@
     listeners.push(fn); fn({ ...state });
     return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
   }
-  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, refresh, refreshAdmin, call, signIn, signOut, friendly };
+  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, loadFeedback, refresh, refreshAdmin, call, signIn, signOut, friendly };
 
   try {
     if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
@@ -176,7 +181,7 @@
       ++removedRequest; removedCursor = null;
       emit({ user: user ? { uid: user.uid, email: user.email } : null, admin: false, checkingAdmin: !!user,
         sources: [], settings: null, runtime: null, quota: null, lastRun: null,
-        removed: [], removedLoading: false, removedError: '', removedHasMore: false });
+        removed: [], removedLoading: false, removedError: '', removedHasMore: false, feedback:[],feedbackLoading:false,feedbackError:'' });
       if (!user) return;
       try {
         const admin = await db.doc('admins/' + user.uid).get();

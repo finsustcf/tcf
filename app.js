@@ -17,7 +17,7 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
   const state = { page: 'weekly', mode: 'previous', ...U.bounds(), search: '', topic: '', region: '', type: '',
-    selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, busy: false };
+    selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, feedbackBusy:false,feedbackRequestId:null,busy: false };
   let timer, returnFocus, accountRequested = false, previousUID = null, previousAdmin = false;
 
   const periodItems = () => B().articles.filter(item => U.articleDay(item) >= state.from && U.articleDay(item) <= state.to)
@@ -46,7 +46,7 @@
       <nav class="main-nav" aria-label="主要選單"><button class="nav-link ${state.page === 'weekly' ? 'active' : ''}" data-action="weekly" ${state.page === 'weekly' ? 'aria-current="page"' : ''}>週報閱讀</button><button class="nav-link ${state.page === 'history' ? 'active' : ''}" data-action="history" ${state.page === 'history' ? 'aria-current="page"' : ''}>歷史週報</button><button class="nav-link ${state.page === 'knowledge' ? 'active' : ''}" data-action="knowledge" ${state.page === 'knowledge' ? 'aria-current="page"' : ''}>知識庫</button></nav>
       <button class="admin-link" data-action="account" ${B().checkingAdmin ? 'disabled' : ''}>${icon('settings')}${adminLabel}</button>
       </div></header><main id="main-content" class="page-wrap" tabindex="-1"></main>
-      <footer class="site-footer"><p>${esc(D.title)}</p></footer>`;
+      <button class="btn feedback-launch" data-action="feedback">問題回報</button><footer class="site-footer"><p>${esc(D.title)}</p></footer>`;
     if (state.page === 'history') { if(state.mode==='archive') renderWeekly();else renderHistory(); } else if (state.page === 'knowledge') renderKnowledge(); else renderWeekly();
   }
 
@@ -166,23 +166,25 @@
     let content;
     if (state.settingsTab === 'sources') {
       content = `<section class="source-group"><h3>主管機關、同業與相關機構</h3>${sourceRows(false)}<h3>新聞媒體</h3>${sourceRows(true)}<div class="settings-actions"><button class="btn" data-action="seed-sources" ${state.busy ? 'disabled' : ''}>補齊預設來源</button></div><details class="advanced-settings"><summary>新增來源</summary>${sourceForm()}</details></section>`;
+    } else if(state.settingsTab==='feedback'){
+      content=`<section><h3>問題回報</h3><button class="btn" data-action="reload-feedback" ${backend.feedbackLoading?'disabled':''}>重新讀取</button>${backend.feedbackLoading?'<p role="status">讀取中…</p>':''}${backend.feedbackError?`<p role="alert">${esc(backend.feedbackError)}</p>`:''}${(backend.feedback||[]).map(x=>`<article class="feedback-item"><p class="small-note">${time(x.createdAt)}｜${esc(x.category)}</p><h4>${esc(x.email)}</h4><p class="feedback-message">${esc(x.message)}</p><p class="small-note">${esc(x.view)}｜${esc(x.page)}</p></article>`).join('')||(!backend.feedbackLoading?'<p>目前沒有問題回報。</p>':'')}<p class="small-note">顯示最近100筆；聯絡信箱與內容僅管理員可見。</p></section>`;
     } else if (state.settingsTab === 'removed') {
       const items = backend.removed || [];
       content = `<section class="removed-section"><div class="section-heading"><h3>已移除資訊</h3><button class="text-btn" data-action="reload-removed" ${backend.removedLoading || state.busy ? 'disabled' : ''}>重新讀取</button></div><p class="small-note">這些資訊未公開顯示；還原後會回到原發布日期所屬的期間。歷史封存週報不會自動改寫。</p>
         ${backend.removedError ? `<p class="form-error" role="alert">${esc(backend.removedError)}</p>` : ''}
-        ${items.length ? `<div class="removed-list">${items.map(item => `<article class="removed-item"><div class="removed-copy"><p class="news-meta">${esc(U.dateText(item))}・${esc(item.source)}</p><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><a href="${esc(U.safeURL(item.url))}" target="_blank" rel="noopener noreferrer">查看原文</a></div><button class="btn" data-action="restore" data-id="${esc(item.id)}" ${state.busy || backend.removedLoading ? 'disabled' : ''}>還原</button></article>`).join('')}</div>` : !backend.removedLoading && !backend.removedError ? '<p class="removed-empty">目前沒有已移除的資訊。</p>' : ''}
+        ${items.length ? `<div class="removed-list">${items.map(item => `<article class="removed-item"><div class="removed-copy"><p class="news-meta">${esc(U.dateText(item))}・${esc(item.source)}</p><h3>${esc(item.title)}</h3><p>${esc(item.summary)}</p><a href="${esc(U.safeURL(item.url))}" target="_blank" rel="noopener noreferrer">查看原文</a></div><button class="btn" data-action="restore" data-id="${esc(item.id)}" ${state.busy || backend.removedLoading ? 'disabled' : ''}>還原</button><button class="btn danger-btn" data-action="permanent-delete" data-id="${esc(item.id)}" ${state.busy?'disabled':''}>永久刪除</button></article>`).join('')}</div>` : !backend.removedLoading && !backend.removedError ? '<p class="removed-empty">目前沒有已移除的資訊。</p>' : ''}
         ${backend.removedLoading ? '<p class="loading" role="status">讀取已移除資訊中…</p>' : ''}
         ${backend.removedHasMore ? `<button class="btn" data-action="more-removed" ${backend.removedLoading || state.busy ? 'disabled' : ''}>載入更多已移除資訊</button>` : ''}</section>`;
     } else if (state.settingsTab === 'add') {
       content = articleForm();
     } else {
-      content = `<section class="settings-section"><div class="schedule-row"><span>資訊蒐集</span><strong>每天 08:00、12:00、16:00</strong></div><div class="schedule-row"><span>上週週報整理</span><strong>週一 00:00 啟動</strong></div><p class="small-note">皆為台灣時間。</p><div class="pipeline-state"><span class="status-dot ${settings.enabled ? 'enabled' : ''}"></span>自動更新${settings.enabled ? '已開啟' : '尚未開啟'}</div>
+      content = `<section class="settings-section"><div class="schedule-row"><span>資訊蒐集</span><strong>每天 08:00、12:00、16:00</strong></div><div class="schedule-row"><span>上週週報整理</span><strong>週一 00:00 啟動</strong></div><div class="pipeline-state"><span class="status-dot ${settings.enabled ? 'enabled' : ''}"></span>自動更新${settings.enabled ? '已開啟' : '尚未開啟'}</div>
         <div class="settings-actions">${!ready ? `<button class="btn btn-primary" data-action="initialize" ${state.busy ? 'disabled' : ''}>啟用平台與預設來源</button>` : `<button class="btn" data-action="toggle-pipeline" ${state.busy ? 'disabled' : ''}>${settings.enabled ? '暫停自動更新' : '開啟自動更新'}</button><button class="btn" data-action="collect" ${state.busy ? 'disabled' : ''}>${state.busy ? '處理中…' : '立即更新'}</button><button class="btn" data-action="build-weekly" ${state.busy ? 'disabled' : ''}>重新彙整上週週報</button>`}</div>
         ${backend.runtime?.message ? `<p class="status-message">${esc(backend.runtime.message)}</p>` : ''}
-        ${run ? `<div class="run-status"><h3>最近一次更新</h3><p>${time(run.startedAt)}・新增 ${run.created || 0} 則・待處理 ${run.pending || 0} 則${run.state === 'running' ? '・執行中' : run.state === 'failed' ? '・未完成' : ''}</p>${run.message ? `<p class="status-message">${esc(run.message)}</p>` : ''}${run.errors?.length ? `<details><summary>查看未完成項目（${run.errors.length}）</summary>${run.errors.map(error => `<p>${esc(error.source)}${error.title ? '｜'+esc(error.title):''}：${esc(error.message)}${U.safeURL(error.url)?` <a href="${esc(U.safeURL(error.url))}" target="_blank" rel="noopener noreferrer">查看原文</a>`:''}</p>`).join('')}</details>` : ''}</div>` : ''}
+        <div class="archive-compact"><button class="btn" data-action="compact-archives" ${state.busy?'disabled':''}>縮短既有週報重點</button><p class="small-note" id="compact-progress">將上週及歷史週報的長重點濃縮，網站與Office同步。</p></div>${run ? `<div class="run-status"><h3>最近一次更新</h3><p>${time(run.startedAt)}・新增 ${run.created || 0} 則・待處理 ${run.pending || 0} 則${run.state === 'running' ? '・執行中' : run.state === 'failed' ? '・未完成' : ''}</p>${run.message ? `<p class="status-message">${esc(run.message)}</p>` : ''}${run.pendingItems?.length?`<section class="incomplete-items"><h4>待處理資訊</h4>${run.pendingItems.map(x=>`<p><strong>${esc(x.title)}</strong><br>來源：${esc(x.source)}<br>原因：${esc(x.reason)}${U.safeURL(x.url)?` <a href="${esc(U.safeURL(x.url))}" target="_blank" rel="noopener noreferrer">查看原文</a>`:''}</p>`).join('')}${run.pending>run.pendingItems.length?`<p>另有 ${run.pending-run.pendingItems.length} 則，後續更新將依序處理。</p>`:''}</section>`:''}${run.errors?.length ? `<section class="incomplete-items"><h4>未完成的資訊或來源</h4>${run.errors.map(error => `<p><strong>${esc(error.title||error.url||('來源清單：'+error.source))}</strong><br>來源：${esc(error.source)}<br>原因：${esc(error.message)}${U.safeURL(error.url)?` <a href="${esc(U.safeURL(error.url))}" target="_blank" rel="noopener noreferrer">查看原文</a>`:''}</p>`).join('')}</section>` : ''}</div>` : ''}
         </section>`;
     }
-    $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
+    $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊'], ['feedback', '問題回報']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
     showDialog($('settings-dialog'));
   }
   async function task(action, data, message) {
@@ -218,7 +220,33 @@
     finally { state.busy = false; if ($('select-all')) renderSelection(); }
   }
 
-  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'seed-sources', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed']);
+
+  function openFeedback(){
+    state.feedbackRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+    $('feedback-dialog').innerHTML=`<button class="dialog-close" data-action="close-feedback" aria-label="關閉問題回報">${icon('close')}</button><h2 id="feedback-title" class="dialog-title">問題回報</h2><form id="feedback-form" class="stack-form"><label class="field">問題類型<select name="category" required><option value="">請選擇</option>${['介面','資料內容','下載','其他'].map(x=>`<option>${x}</option>`).join('')}</select></label><label class="field">問題說明<textarea name="message" required maxlength="2000" rows="5"></textarea></label><label class="field">聯絡信箱<input name="email" type="email" required maxlength="254" autocomplete="email"></label><p class="small-note">三個欄位皆必填，回報內容與信箱僅供管理員查看。系統會附上平台、頁面與回報時間。</p><p id="feedback-error" class="form-error" role="alert"></p><button class="btn" type="submit">送出回報</button></form>`;
+    showDialog($('feedback-dialog'));
+  }
+  async function sendFeedback(form,values){
+    if(state.feedbackBusy)return;
+    state.feedbackBusy=true;const submit=form.querySelector('[type=submit]');submit.disabled=true;submit.textContent='送出中…';
+    try{await window.PlatformBackend.call(D.functions.feedback,{...values,operation:'feedback',requestId:state.feedbackRequestId,page:location.origin+location.pathname,view:state.page+' / '+modeLabel()});close($('feedback-dialog'));toast('已收到你的問題回報。');}
+    catch(e){$('feedback-error').textContent=e.message;}
+    finally{state.feedbackBusy=false;submit.disabled=false;submit.textContent='送出回報';}
+  }
+  async function compactArchives(){
+    if(state.busy||!B().admin)return;state.busy=true;let total=0;
+    try{let result;do{
+      document.querySelectorAll('#settings-dialog button').forEach(b=>b.disabled=true);
+      if($('compact-progress'))$('compact-progress').textContent=`整理中，已完成 ${total} 份週報…`;
+      result=await window.PlatformBackend.call(D.functions.compact,{operation:'compact'});total+=result.completed||0;
+      if(result.remaining&&!result.completed)throw Error('仍有週報待處理，請稍後再試。');
+    }while(result.remaining&&B().admin);
+    await window.PlatformBackend.refresh();toast(`已縮短 ${total} 份既有週報重點。`);
+    }catch(e){toast(`已完成 ${total} 份；其餘尚未完成：${e.message}。可再次執行接續。`);}
+    finally{state.busy=false;if($('settings-dialog').open&&B().admin)settingsDialog();}
+  }
+
+  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'seed-sources', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'compact-archives', 'reload-feedback']);
   document.addEventListener('click', async event => {
     const button = event.target.closest('[data-action]'); if (!button) return;
     event.preventDefault(); const action = button.dataset.action, id = button.dataset.id;
@@ -243,10 +271,19 @@
       case 'clear-selection': state.selected.clear(); renderList(); break;
       case 'reload': await window.PlatformBackend.refresh(); break;
       case 'account': account(); break;
-      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
+      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
       case 'reload-removed': await window.PlatformBackend.loadRemoved(); break;
       case 'more-removed': await window.PlatformBackend.loadRemoved({ more: true }); break;
       case 'restore': if ((B().removed || []).some(item => item.id === id)) await task('visibility', { id, published: true }, '資訊已還原，可切換至原發布日期查看。'); break;
+      case 'feedback': openFeedback();break;
+      case 'close-feedback': if(!state.feedbackBusy)close($('feedback-dialog'));break;
+      case 'reload-feedback': await window.PlatformBackend.loadFeedback();break;
+      case 'compact-archives': await compactArchives();break;
+      case 'permanent-delete': {
+        const item=(B().removed||[]).find(x=>x.id===id);if(!item)break;
+        if(!window.confirm(`永久刪除「${item.title}」？\n\n此操作無法還原，會刪除資訊、編輯紀錄與待處理內容。已封存歷史週報仍保留當時內容。`))break;
+        await task('permanentDelete',{id,confirm:true,operation:'permanentDelete'},'資訊已永久刪除。');break;
+      }
       case 'close-settings': close($('settings-dialog')); break;
       case 'copy-uid': try { await navigator.clipboard.writeText(B().user.uid); toast('UID 已複製。'); } catch { toast('請選取 UID 欄位並複製。'); } break;
       case 'logout': close($('settings-dialog')); await window.PlatformBackend.signOut(); break;
@@ -287,13 +324,14 @@
   });
   document.addEventListener('submit', async event => {
     const form = event.target, id = form.id;
-    if (!['filter-form', 'knowledge-filter', 'date-form', 'source-form', 'article-form', 'edit-form'].includes(id)) return;
+    if (!['filter-form', 'knowledge-filter', 'date-form', 'source-form', 'article-form', 'edit-form', 'feedback-form'].includes(id)) return;
     event.preventDefault(); if (id === 'filter-form' || id==='knowledge-filter') return;
     const values = Object.fromEntries(new FormData(form));
     if (id === 'date-form') {
       if (!U.validDate(values.from) || !U.validDate(values.to) || values.from > values.to || values.to > U.today()) { $('date-error').textContent = '請選擇有效日期，結束日需晚於或等於開始日，且不可晚於今天。'; return; }
       await setPeriod('custom', values.from, values.to); return;
     }
+    if(id==='feedback-form'){await sendFeedback(form,values);return;}
     if (!B().admin || state.busy) return;
     if (id === 'source-form') await task('source', { ...values, enabled: true }, '來源已新增。');
     if (id === 'article-form') await task('ingest', values, result => {
@@ -309,7 +347,7 @@
     }
 
   });
-  ['detail-dialog', 'settings-dialog'].forEach(id => $(id).addEventListener('close', () => returnFocus?.focus?.()));
+  ['detail-dialog', 'settings-dialog', 'feedback-dialog'].forEach(id => $(id).addEventListener('close', () => returnFocus?.focus?.()));
   window.PlatformBackend.onState(() => {
     const focused = document.activeElement?.id, selection = document.activeElement?.selectionStart;
     const allowed = new Set(filtered().map(item => item.id));
@@ -320,7 +358,7 @@
       if ($('detail-dialog').open) $('detail-dialog').close();
     }
     previousUID = B().user?.uid || null; previousAdmin = B().admin;
-    if ($('settings-dialog').open && B().admin && state.settingsTab === 'removed') settingsDialog();
+    if ($('settings-dialog').open && B().admin && ['removed','feedback'].includes(state.settingsTab)) settingsDialog();
     if (accountRequested && B().user && !B().checkingAdmin) { accountRequested = false; account(); }
   });
 })();
