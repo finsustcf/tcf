@@ -16,7 +16,7 @@
     external: '<path d="M14 3h7v7m0-7L10 14M10 4H4v16h16v-6"/>'
   };
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
-  const state = { page: 'weekly', mode: 'previous', ...U.bounds(), search: '', topic: '', region: '',
+  const state = { page: 'weekly', mode: 'previous', ...U.bounds(), search: '', topic: '', region: '', type: '',
     selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, busy: false };
   let timer, returnFocus, accountRequested = false, previousUID = null, previousAdmin = false;
 
@@ -26,7 +26,7 @@
   function filtered() {
     const query = state.search.trim().toLocaleLowerCase();
     return periodItems().filter(item => (!state.focusIds || state.focusIds.has(item.id)) && (!state.topic || item.topics.includes(state.topic))
-      && (!state.region || (item.region || 'unknown') === state.region)
+      && (!state.region || (item.region || 'unknown') === state.region) && (!state.type || item.type === state.type)
       && (!query || [item.title, item.summary, item.source, item.implication, ...item.topics].join(' ').toLocaleLowerCase().includes(query)));
   }
   function selectedItems() { return filtered().filter(item => state.selected.has(item.id)); }
@@ -46,35 +46,36 @@
       <nav class="main-nav" aria-label="主要選單"><button class="nav-link ${state.page === 'weekly' ? 'active' : ''}" data-action="weekly" ${state.page === 'weekly' ? 'aria-current="page"' : ''}>週報閱讀</button><button class="nav-link ${state.page === 'history' ? 'active' : ''}" data-action="history" ${state.page === 'history' ? 'aria-current="page"' : ''}>歷史週報</button><button class="nav-link ${state.page === 'knowledge' ? 'active' : ''}" data-action="knowledge" ${state.page === 'knowledge' ? 'aria-current="page"' : ''}>知識庫</button></nav>
       <button class="admin-link" data-action="account" ${B().checkingAdmin ? 'disabled' : ''}>${icon('settings')}${adminLabel}</button>
       </div></header><main id="main-content" class="page-wrap" tabindex="-1"></main>
-      <footer class="site-footer"><p>${esc(D.title)}</p><p>日期時間以臺灣時間為準；僅有日期的來源保留原文日期。</p></footer>`;
-    if (state.page === 'history') renderHistory(); else if (state.page === 'knowledge') renderKnowledge(); else renderWeekly();
+      <footer class="site-footer"><p>${esc(D.title)}</p></footer>`;
+    if (state.page === 'history') { if(state.mode==='archive') renderWeekly();else renderHistory(); } else if (state.page === 'knowledge') renderKnowledge(); else renderWeekly();
   }
 
   function renderWeekly() {
-    $('main-content').innerHTML = `<div class="period-row"><div class="period-tabs" role="group" aria-label="資料期間">
-      ${[['previous', '上週週報'], ['current', '本週資訊'], ['custom', '自訂期間']].map(([mode, label]) => `<button class="period-tab ${(mode === 'custom' ? state.customOpen : state.mode === mode) ? 'active' : ''}" data-action="period" data-mode="${mode}" aria-pressed="${mode === 'custom' ? state.customOpen : state.mode === mode}">${label}</button>`).join('')}
-      </div><p class="updated">${B().snapshot ? '彙整時間' : '更新時間'}：${time(B().snapshot?.generatedAt || B().status?.lastSuccessAt)}</p></div>
+    $('main-content').innerHTML = `<div class="period-row">${state.page==='history'?`<div class="archive-controls"><button class="btn" data-action="history">返回週報列表</button><label>選擇其他週<select id="archive-picker" aria-label="選擇其他週">${B().archives.map(x=>`<option value="${esc(x.id)}" ${B().snapshot?.id===x.id?'selected':''}>${esc(U.period(x.periodStart,x.periodEnd))}</option>`).join('')}</select></label></div>`:`<div class="period-tabs" role="group" aria-label="資料期間">
+      ${[['previous', '上週週報'], ['current', '本週資訊'], ['custom', '自訂期間']].map(([mode, label]) => `<button class="period-tab ${(state.mode === mode) ? 'active' : ''}" data-action="period" data-mode="${mode}" aria-pressed="${state.mode === mode}">${label}</button>`).join('')}
+      </div>`}<p class="updated">${B().snapshot ? '彙整時間' : '更新時間'}：${time(B().snapshot?.generatedAt || B().status?.lastSuccessAt)}</p></div>
       <div id="custom-period"></div><section class="report-panel" aria-labelledby="report-period"><div class="report-identity">
       <p class="report-label">${icon('calendar')}${modeLabel()}</p><h1 class="report-period" id="report-period">${U.period(state.from,state.to)}</h1><p class="report-count" id="report-count"></p>
-      </div><div class="export-area"><p class="export-label" id="export-label" aria-live="polite"></p><div class="export-buttons">
-      ${[['xlsx', 'Excel'], ['docx', 'Word'], ['pptx', 'PowerPoint']].map(([format, label]) => `<button class="btn export-btn" data-action="export" data-format="${format}">${icon('download')}${label}</button>`).join('')}
-      </div></div></section><section class="highlights" id="highlights" aria-labelledby="highlights-title"></section>
-      <section aria-labelledby="list-title"><div class="section-heading"><h2 id="list-title">${scopeLabel()}資訊</h2><div class="list-heading-actions"><p id="result-count" role="status" aria-live="polite"></p><button class="text-btn" data-action="reload">重新讀取</button></div></div>
+      </div></section><section class="highlights" id="highlights" aria-labelledby="highlights-title"></section>
+      <section class="information-panel" aria-labelledby="list-title"><div class="section-heading"><h2 id="list-title">${scopeLabel()}資訊</h2><div class="list-heading-actions"><p id="result-count" role="status" aria-live="polite"></p><button class="text-btn" data-action="reload">重新讀取</button></div></div>
       <form class="filter-form" id="filter-form" role="search"><label class="search-field"><span class="sr-only">搜尋標題、摘要或來源</span>${icon('search')}<input id="search-input" type="search" placeholder="搜尋標題、摘要或來源" value="${esc(state.search)}" autocomplete="off"></label>
       <label><span class="sr-only">篩選主題</span><select id="topic-filter"><option value="">全部主題</option>${D.topics.map(topic => `<option ${state.topic === topic ? 'selected' : ''}>${esc(topic)}</option>`).join('')}</select></label>
-      <label><span class="sr-only">篩選來源地區</span><select id="region-filter"><option value="">國內外來源</option><option ${state.region === '國內' ? 'selected' : ''}>國內</option><option ${state.region === '國外' ? 'selected' : ''}>國外</option><option value="unknown" ${state.region === 'unknown' ? 'selected' : ''}>未標示</option></select></label></form>
-      <div class="list-toolbar"><label class="select-all"><input type="checkbox" id="select-all">全選篩選結果</label><div class="selection-controls"><span id="selection-count" aria-live="polite"></span><button class="text-btn" data-action="reset-filters" id="reset-filters">清除篩選</button><button class="text-btn" data-action="clear-selection" id="clear-selection">取消勾選</button></div></div>
+      <label><span class="sr-only">篩選來源地區</span><select id="region-filter"><option value="">國內外來源</option><option ${state.region === '國內' ? 'selected' : ''}>國內</option><option ${state.region === '國外' ? 'selected' : ''}>國外</option><option value="unknown" ${state.region === 'unknown' ? 'selected' : ''}>未標示</option></select></label><label><span class="sr-only">篩選來源類型</span><select id="type-filter"><option value="">全部來源類型</option>${D.sourceTypes.map(x=>`<option ${state.type===x?'selected':''}>${esc(x)}</option>`).join('')}</select></label></form>
+      <div class="list-toolbar"><label class="select-all"><input type="checkbox" id="select-all">選取全部文章</label><div class="selection-controls"><span id="selection-count" aria-live="polite"></span><button class="text-btn" data-action="reset-filters" id="reset-filters">清除篩選</button><button class="text-btn" data-action="clear-selection" id="clear-selection">取消選取</button></div></div><div class="export-area"><p class="export-label" id="export-label" aria-live="polite"></p><div class="export-buttons">
+      ${[['xlsx', 'Excel'], ['docx', 'Word'], ['pptx', 'PowerPoint']].map(([format, label]) => `<button class="btn export-btn" data-action="export" data-format="${format}">${icon('download')}${label}</button>`).join('')}
+      </div></div>
       <div id="news-list"></div><div class="load-more" id="load-more"></div></section>`;
     renderDateForm(); renderHighlights(); renderList();
   }
 
   function renderDateForm() {
-    $('custom-period').innerHTML = state.customOpen ? `<form class="date-form" id="date-form"><label>開始日期<input name="from" type="date" value="${state.from}" max="${U.today()}" required></label><label>結束日期<input name="to" type="date" value="${state.to}" max="${U.today()}" required></label><button class="btn btn-primary" type="submit">套用日期</button><p class="date-error" id="date-error" role="alert"></p></form>` : '';
+    $('custom-period').innerHTML = state.customOpen ? `<form class="date-form" id="date-form"><label>開始日期<input name="from" type="date" value="${state.from}" max="${U.today()}" required></label><label>結束日期<input name="to" type="date" value="${state.to}" max="${U.today()}" required></label><button class="btn btn-primary" type="submit">套用期間</button><p class="date-error" id="date-error" role="alert"></p></form>` : '';
   }
   function renderHighlights() {
-    if (B().loading || B().error) { $('highlights').innerHTML = ''; return; }
-    const points = U.highlights(periodItems(), B().insights);
-    $('highlights').innerHTML = `<div class="section-heading"><h2 id="highlights-title">${scopeLabel()}重點</h2></div>${points.length ? `<div class="highlight-list">${points.map((item,index)=>`<article class="highlight"><span class="highlight-number">${index+1}</span><div class="highlight-copy"><h3>${esc(item.title)}</h3><p>${esc(item.detail)}</p><button class="text-btn" data-action="related" data-index="${index}">查看相關資訊（${item.articleIds.length} 則）${icon('arrow')}</button></div></article>`).join('')}</div>` : '<p class="small-note">這段期間尚無可整理的重點。</p>'}`;
+    const node=$('highlights');
+    if (!['previous','archive'].includes(state.mode) || B().loading || B().error) { node.hidden=true;node.innerHTML='';return; }
+    node.hidden=false;const points=U.highlights(periodItems(),B().insights);
+    node.innerHTML=`<div class="section-heading"><h2 id="highlights-title">${scopeLabel()}重點</h2></div>${points.length?`<div class="highlight-list">${points.map((item,index)=>`<article class="highlight"><span class="highlight-number">${index+1}</span><div class="highlight-copy"><h3>${esc(item.title)}</h3><p>${esc(item.detail)}</p></div></article>`).join('')}</div>`:'<p class="small-note">'+(periodItems().length?'這份週報尚未完成重點整理。':'這段期間尚無收錄資訊。')+'</p>'}`;
   }
   function renderList() {
     const all = periodItems(), items = filtered();
@@ -103,32 +104,32 @@
     const count = state.selected.size, all = $('select-all');
     all.checked = items.length > 0 && count === items.length;
     all.indeterminate = count > 0 && count < items.length; all.disabled = !items.length || B().loading;
-    $('selection-count').textContent = count ? `已勾選 ${count} 則` : '';
+    $('selection-count').textContent = count ? `已選取 ${count} 則` : '';
     $('clear-selection').hidden = !count;
-    $('reset-filters').hidden = !(state.search || state.topic || state.region || state.focusIds);
-    $('export-label').textContent = count ? `下載已勾選的 ${count} 則資訊` : `下載篩選結果・${items.length} 則資訊`;
+    $('reset-filters').hidden = !(state.search || state.topic || state.region || state.type || state.focusIds);
+    $('export-label').textContent = count ? `下載已選取的 ${count} 則` : `下載目前列表全部 ${items.length} 則`;
     document.querySelectorAll('.export-btn').forEach(button => { button.disabled = state.busy || B().loading || !!B().error || !items.length; });
   }
-  function resetFilters() { state.search = ''; state.topic = ''; state.region = ''; state.focusIds = null; state.selected.clear(); state.limit = 8; }
+  function resetFilters() { state.search = ''; state.topic = ''; state.region = ''; state.type = ''; state.focusIds = null; state.selected.clear(); state.limit = 8; }
   async function setPeriod(mode, from, to, archiveId = null) {
-    state.mode = mode; state.page = 'weekly'; Object.assign(state, from ? { from, to } : U.bounds(mode));
-    state.customOpen = mode === 'custom'; resetFilters(); frame();
-    await window.PlatformBackend.loadRange(state.from, state.to, { archiveId });
+    state.mode = mode; state.page = mode==='archive'?'history':'weekly'; Object.assign(state, from ? { from, to } : U.bounds(mode));
+    state.customOpen = false; resetFilters(); frame();
+    await window.PlatformBackend.loadRange(state.from, state.to, { archiveId, preferArchive: mode==='previous' });
   }
   function renderHistory() {
     const error = B().error;
-    $('main-content').innerHTML = `<div class="history-heading"><h1>歷史週報</h1><p>選擇期間後，可閱讀與下載該週封存內容。</p></div>${error ? `<div class="empty-state"><h3>暫時無法讀取週報</h3><p>${esc(error)}</p><button class="btn" data-action="reload">重新讀取</button></div>` : B().archives.length ? `<div class="history-list">${B().archives.map(item => `<button class="history-card" data-action="archive" data-id="${esc(item.id)}" data-from="${esc(item.periodStart)}" data-to="${esc(item.periodEnd)}">${icon('archive')}<span class="history-copy"><strong>${esc(U.period(item.periodStart, item.periodEnd))}</strong><p>${item.count || 0} 則資訊・彙整時間：${time(item.generatedAt)}</p></span><span class="history-open">閱讀週報${icon('arrow')}</span></button>`).join('')}</div>` : `<div class="empty-state"><h3>${B().loading ? '讀取週報中…' : '尚無封存週報'}</h3><p>每週一早上整理上一週內容。</p></div>`}`;
+    $('main-content').innerHTML = `<div class="history-heading"><h1>歷史週報</h1><p>選擇期間後，可閱讀與下載該週封存內容。</p></div>${error ? `<div class="empty-state"><h3>暫時無法讀取週報</h3><p>${esc(error)}</p><button class="btn" data-action="reload">重新讀取</button></div>` : B().archives.length ? `<div class="history-list">${B().archives.map(item => `<button class="history-card" data-action="archive" data-id="${esc(item.id)}" data-from="${esc(item.periodStart)}" data-to="${esc(item.periodEnd)}">${icon('archive')}<span class="history-copy"><strong>${esc(U.period(item.periodStart, item.periodEnd))}</strong><p>${item.count || 0} 則資訊・彙整時間：${time(item.generatedAt)}</p></span><span class="history-open">閱讀週報${icon('arrow')}</span></button>`).join('')}</div>` : `<div class="empty-state"><h3>${B().loading ? '讀取週報中…' : '尚無封存週報'}</h3><p>每週一彙整上一週內容。</p></div>`}`;
   }
   function renderKnowledge(){
     $('main-content').innerHTML=`<div class="history-heading"><h1>知識庫</h1></div><form id="knowledge-filter" class="filter-form knowledge-filter" role="search"><label class="search-field"><span class="sr-only">搜尋名詞或縮寫</span>${icon('search')}<input id="knowledge-search" type="search" placeholder="搜尋名詞、縮寫或解釋" value="${esc(state.knowledgeSearch)}"></label><label><span class="sr-only">主題</span><select id="knowledge-topic"><option value="">全部主題</option>${D.topics.map(x=>`<option ${state.knowledgeTopic===x?'selected':''}>${esc(x)}</option>`).join('')}</select></label><button class="btn" type="button" data-action="reload-knowledge">重新讀取</button></form><div id="knowledge-list"></div>`;renderKnowledgeList();
   }
   function renderKnowledgeList(){
-    if(B().knowledgeLoading){$('knowledge-list').innerHTML='<div class="loading" role="status">讀取知識庫中…</div>';return;}
-    if(B().knowledgeError){$('knowledge-list').innerHTML=`<div class="empty-state"><h2>暫時無法讀取知識庫</h2><p>${esc(B().knowledgeError)}</p><button class="btn" data-action="reload-knowledge">重新讀取</button></div>`;return;}
+    if(B().knowledgeLoading&&!(B().knowledge||[]).length){$('knowledge-list').innerHTML='<div class="loading" role="status">讀取知識庫中…</div>';return;}
+    if(B().knowledgeError&&!(B().knowledge||[]).length){$('knowledge-list').innerHTML=`<div class="empty-state"><h2>暫時無法讀取知識庫</h2><p>${esc(B().knowledgeError)}</p><button class="btn" data-action="reload-knowledge">重新讀取</button></div>`;return;}
     const query=state.knowledgeSearch.toLocaleLowerCase().replace(/\s/g,''),items=(B().knowledge||[]).filter(x=>(!state.knowledgeTopic||(x.topics||[]).includes(state.knowledgeTopic))&&(!query||[x.term,...x.aliases||[],x.definition].join(' ').toLocaleLowerCase().replace(/\s/g,'').includes(query)));
-    $('knowledge-list').innerHTML=items.length?`<p class="knowledge-count">${items.length} 個詞條</p><div class="knowledge-grid">${items.map(x=>`<article class="knowledge-card"><h2><button class="article-title" data-action="knowledge-detail" data-id="${esc(x.id)}">${esc(x.term)}</button></h2>${x.aliases?.length?`<p class="knowledge-aliases">${x.aliases.filter(a=>a!==x.term).map(esc).join('、')}</p>`:''}<p>${esc(x.definition)}</p><button class="text-btn" data-action="knowledge-detail" data-id="${esc(x.id)}">查看說明${icon('arrow')}</button></article>`).join('')}</div>`:'<div class="empty-state"><h2>沒有符合的詞條</h2><p>知識庫會隨公開資訊整理逐步累積。</p></div>';
+    $('knowledge-list').innerHTML=(B().knowledgeError?`<p class="small-note" role="status">部分詞條無法更新：${esc(B().knowledgeError)}。已載入內容仍可查閱。</p>`:'')+(items.length?`<p class="knowledge-count">${items.length} 個詞條</p><div class="knowledge-grid">${items.map(x=>`<article class="knowledge-card"><h2><button class="article-title" data-action="knowledge-detail" data-id="${esc(x.id)}">${esc(x.term)}</button></h2>${x.aliases?.length?`<p class="knowledge-aliases">${x.aliases.filter(a=>a!==x.term).map(esc).join('、')}</p>`:''}<p>${esc(x.definition)}</p><button class="text-btn" data-action="knowledge-detail" data-id="${esc(x.id)}">查看說明${icon('arrow')}</button></article>`).join('')}</div>`:'<div class="empty-state"><h2>沒有符合的詞條</h2><p>請調整關鍵字或主題。</p></div>');
   }
-  function knowledgeDetail(id){const term=(B().knowledge||[]).find(x=>x.id===id);if(!term)return;$('detail-dialog').innerHTML=`<button class="dialog-close" data-action="close-detail" aria-label="關閉內容">${icon('close')}</button><div class="detail-body"><h2 id="detail-title">${esc(term.term)}</h2><section><h3>簡明解釋</h3><p>${esc(term.definition)}</p></section><section><h3>與銀行業務的關係</h3><p>${esc(term.bankRelevance)}</p></section><section><h3>參考來源</h3><a href="${esc(U.safeURL(term.url))}" target="_blank" rel="noopener noreferrer">${esc(term.source||'開啟參考來源')}${icon('external')}</a></section><p class="small-note">更新時間：${time(term.updatedAt)}</p></div>${term.articleIds?.length?`<div class="detail-actions"><button class="btn" data-action="knowledge-related" data-id="${esc(id)}">查看相關資訊</button></div>`:''}`;showDialog($('detail-dialog'));}
+  function knowledgeDetail(id){const term=(B().knowledge||[]).find(x=>x.id===id);if(!term)return;$('detail-dialog').innerHTML=`<button class="dialog-close" data-action="close-detail" aria-label="關閉內容">${icon('close')}</button><div class="detail-body"><h2 id="detail-title">${esc(term.term)}</h2><section><h3>簡明解釋</h3><p>${esc(term.definition)}</p></section><section><h3>銀行值得關注</h3><p>${esc(term.bankRelevance)}</p></section><section><h3>參考來源</h3><a href="${esc(U.safeURL(term.url))}" target="_blank" rel="noopener noreferrer">${esc(term.source||'開啟參考來源')}${icon('external')}</a></section>${term.updatedAt?`<p class="small-note">更新時間：${time(term.updatedAt)}</p>`:''}</div>${term.articleIds?.length?`<div class="detail-actions"><button class="btn" data-action="knowledge-related" data-id="${esc(id)}">查看相關資訊</button></div>`:''}`;showDialog($('detail-dialog'));}
   async function showKnowledgeArticles(term){close($('detail-dialog'));state.mode='custom';state.page='weekly';state.customOpen=true;state.from='2000-01-01';state.to=U.today();resetFilters();frame();await window.PlatformBackend.loadRelated(term.articleIds);if(!B().error){state.focusIds=new Set(term.articleIds);if(B().articles.length){state.from=B().articles.map(U.articleDay).sort()[0];state.to=B().articles.map(U.articleDay).sort().at(-1);}frame();}}
   function showDialog(node) { returnFocus = document.activeElement; if (!node.open) node.showModal(); node.scrollTop = 0; }
   function close(node) { node.close(); }
@@ -201,14 +202,13 @@
     } finally {
       state.busy = false;
       document.querySelectorAll('#settings-dialog button').forEach(button => { button.disabled = false; });
-      if (state.page === 'weekly') renderSelection();
+      if ($('select-all')) renderSelection();
     }
   }
   function payload() {
-    const articles = (state.selected.size ? selectedItems() : filtered()).map(U.reportArticle);
-    return { title: D.title, from: state.from, to: state.to, period: U.period(state.from, state.to), articles,
-      topics: U.topics(articles), introduction: '', sectionLabel: scopeLabel(), highlights: U.highlights(articles, B().insights),
-      insights: state.selected.size || state.search || state.topic || state.region ? null : B().insights };
+    const articles=(state.selected.size?selectedItems():filtered()).map(U.reportArticle);
+    const wholeWeek=['previous','archive'].includes(state.mode)&&!!B().snapshot&&articles.length===periodItems().length&&!state.search&&!state.topic&&!state.region&&!state.type&&!state.focusIds;
+    return {title:D.title,from:state.from,to:state.to,period:U.period(state.from,state.to),articles,topics:U.topics(articles),introduction:'',sectionLabel:scopeLabel(),includeHighlights:wholeWeek,highlights:wholeWeek?U.highlights(articles,B().insights):[],insights:wholeWeek?B().insights:null};
   }
   async function download(format) {
     if (state.busy || B().loading || B().error) return;
@@ -216,7 +216,7 @@
     state.busy = true; renderSelection();
     try { await window.PlatformExports.download(format, report); toast(`已產生 ${format === 'xlsx' ? 'Excel' : format === 'docx' ? 'Word' : 'PowerPoint'} 檔案，共 ${report.articles.length} 則資訊。`); }
     catch (error) { toast('下載未完成：' + error.message); }
-    finally { state.busy = false; if (state.page === 'weekly') renderSelection(); }
+    finally { state.busy = false; if ($('select-all')) renderSelection(); }
   }
 
   const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'seed-sources', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed']);
@@ -225,13 +225,12 @@
     event.preventDefault(); const action = button.dataset.action, id = button.dataset.id;
     if (adminActions.has(action) && (!B().admin || state.busy)) return;
     switch (action) {
-      case 'weekly': state.page = 'weekly'; frame(); break;
-      case 'history': state.page = 'history'; frame(); break;
+      case 'weekly': if(!['previous','current','custom'].includes(state.mode))await setPeriod('previous');else{state.page='weekly';frame();}break;
+      case 'history': state.page='history';state.mode='history-list';state.customOpen=false;resetFilters();frame();break;
       case 'knowledge': state.page = 'knowledge'; frame(); if (!B().knowledgeLoaded) await window.PlatformBackend.loadKnowledge(); break;
       case 'reload-knowledge': await window.PlatformBackend.loadKnowledge(); break;
       case 'knowledge-detail': knowledgeDetail(id); break;
       case 'knowledge-related': { const term=B().knowledge.find(x=>x.id===id);if(term)await showKnowledgeArticles(term);break;}
-      case 'related': { const point=U.highlights(periodItems(),B().insights)[Number(button.dataset.index)];if(point){resetFilters();state.focusIds=new Set(point.articleIds);renderWeekly();$('news-list').scrollIntoView?.({block:'start',behavior:'smooth'});}break;}
       case 'period':
         if (button.dataset.mode === 'custom') { state.customOpen = !state.customOpen; renderWeekly(); }
         else await setPeriod(button.dataset.mode);
@@ -257,7 +256,7 @@
       case 'initialize': await task('initialize', {}, '平台已啟用，請按「立即更新」蒐集資訊。'); break;
       case 'seed-sources': await task('seed', {}, '預設來源已補齊。'); break;
       case 'collect': await task('collect', {}, result => `本次新增 ${result.created || 0} 則${Number.isInteger(result.pending) ? '，待處理 ' + result.pending + ' 則' : ''}。`); break;
-      case 'build-weekly': await task('weekly', { force: true }, result => `上週週報已彙整，共 ${result.count || 0} 則。`); break;
+      case 'build-weekly': await task('weekly', { force: true }, result => result.highlightsPending?`文章已封存，共 ${result.count||0} 則；重點尚未完成：${result.reason||'請稍後重新彙整。'}`:`上週週報已彙整，共 ${result.count || 0} 則。`); break;
       case 'toggle-pipeline': await task('pipeline', { ...B().settings, enabled: !B().settings?.enabled }, B().settings?.enabled ? '自動更新已暫停。' : '自動更新已開啟。'); break;
       case 'toggle-source': { const source = B().sources.find(item => item.id === id); if (source) await task('source', { ...source, enabled: !source.enabled }, '來源設定已更新。'); break; }
       case 'edit': { const item = B().articles.find(article => article.id === id); if (!item || B().snapshot) return; close($('detail-dialog')); $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉編輯">${icon('close')}</button><h2 class="dialog-title" id="settings-title">編輯資訊</h2>${articleForm(item)}`; showDialog($('settings-dialog')); break; }
@@ -278,8 +277,9 @@
   document.addEventListener('change', event => {
     const target = event.target;
     if(target.id==='knowledge-topic'){state.knowledgeTopic=target.value;renderKnowledgeList();return;}
-    if (target.id === 'topic-filter' || target.id === 'region-filter') {
-      state[target.id === 'topic-filter' ? 'topic' : 'region'] = target.value; state.focusIds = null;
+    if(target.id==='archive-picker'){const x=B().archives.find(a=>a.id===target.value);if(x)setPeriod('archive',x.periodStart,x.periodEnd,x.id);return;}
+    if (target.id === 'topic-filter' || target.id === 'region-filter' || target.id==='type-filter') {
+      state[{'topic-filter':'topic','region-filter':'region','type-filter':'type'}[target.id]] = target.value; state.focusIds = null;
       state.selected.clear(); state.limit = 8; renderList();
     } else if (target.dataset.select) {
       target.checked ? state.selected.add(target.dataset.select) : state.selected.delete(target.dataset.select);
