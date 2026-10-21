@@ -110,7 +110,7 @@
     try {
       const items = await pages(db.collection(T.knowledge).where('published', '==', true));
       if (request !== knowledgeTicket) return;
-      const merged=new Map((D.knowledgeSeeds||[]).map(x=>[x.id,{...x}]));for(const x of items){const alias=[x.term,...x.aliases||[]].map(v=>String(v).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''));const match=[...merged.values()].find(v=>[v.term,...v.aliases||[]].some(a=>alias.includes(String(a).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''))));if(match)merged.delete(match.id);merged.set(x.id,x);}emit({knowledge:[...merged.values()].sort((a,b)=>a.term.localeCompare(b.term,'zh-TW')),knowledgeLoading:false,knowledgeLoaded:true});
+      const merged=new Map((D.knowledgeSeeds||[]).map(x=>[x.id,{...x}]));for(const x of items){const alias=[x.term,...x.aliases||[]].map(v=>String(v).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''));const match=[...merged.values()].find(v=>[v.term,...v.aliases||[]].some(a=>alias.includes(String(a).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''))));if(match)merged.delete(match.id);merged.set(x.id,{...match,...x,englishTerm:x.englishTerm||match?.englishTerm||'',abbreviation:x.abbreviation||match?.abbreviation||'',translation:x.translation||match?.translation||'',aliases:[...new Set([...(match?.aliases||[]),...(x.aliases||[])])]});}emit({knowledge:[...merged.values()].sort((a,b)=>a.term.localeCompare(b.term,'zh-TW')),knowledgeLoading:false,knowledgeLoaded:true});
     } catch (error) { if (request === knowledgeTicket) emit({ knowledgeLoading: false, knowledgeError: friendly(error) }); }
   }
 

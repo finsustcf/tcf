@@ -77,7 +77,10 @@ window.PLATFORM_DATA = {
       ],
       "id": "d70d02c8427f4e11b1a0edfed9ba62502bddfff3371712bc3f5ddc8225a3b063",
       "articleIds": [],
-      "published": true
+      "published": true,
+      "englishTerm": "Treating Customers Fairly",
+      "abbreviation": "TCF",
+      "translation": "公平待客原則"
     },
     {
       "term": "友善服務",
@@ -93,7 +96,10 @@ window.PLATFORM_DATA = {
       ],
       "id": "a89c8be5aef07d6e0c662480ae15870842ffdd3700a809f7c4334855143ae0ec",
       "articleIds": [],
-      "published": true
+      "published": true,
+      "englishTerm": "",
+      "abbreviation": "",
+      "translation": ""
     },
     {
       "term": "易受損害消費者",
@@ -111,7 +117,10 @@ window.PLATFORM_DATA = {
       ],
       "id": "57129dcc13d224307652264be0e38c299b776625d19f5f3c20d1cd4663a49e99",
       "articleIds": [],
-      "published": true
+      "published": true,
+      "englishTerm": "Vulnerable customers",
+      "abbreviation": "",
+      "translation": "易受損害消費者"
     },
     {
       "term": "網頁無障礙",
@@ -129,7 +138,10 @@ window.PLATFORM_DATA = {
       ],
       "id": "4a41ee70de864438245402ece5bf8c6d0f551693e1c3d8655c5c690361af776f",
       "articleIds": [],
-      "published": true
+      "published": true,
+      "englishTerm": "Web accessibility",
+      "abbreviation": "",
+      "translation": "網頁無障礙"
     }
   ],
   "allowedHosts": [
