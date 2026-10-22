@@ -520,3 +520,14 @@ input,select,textarea{max-width:100%}
 .archive-compact{margin:22px 0}.archive-compact p{margin-top:10px}
 @media(max-width:600px){.removed-item{grid-template-columns:1fr 1fr}.removed-copy{grid-column:1/-1}.feedback-launch{right:14px;bottom:14px}.site-footer{padding-bottom:80px}}
 @media print{.feedback-launch{display:none!important}}
+
+/* Keep the existing vertical rhythm; only inset the list from its border. */
+.news-list{padding-left:20px;padding-right:20px}
+.feedback-launch{position:fixed;right:22px;bottom:22px;z-index:15;background:transparent;border:0;border-radius:0;box-shadow:none;padding:8px 0;min-height:40px;color:var(--muted);font:inherit;font-size:15px;cursor:pointer;text-decoration:none}
+.feedback-launch:hover,.feedback-launch:focus-visible{color:var(--brand);text-decoration:underline;text-underline-offset:4px}
+.btn.action-start{background:var(--soft);border-color:var(--brand);color:var(--brand)}
+.btn.action-stop{background:#eeefed;border-color:#c3c6c1;color:#4e534f}
+.btn.action-start:hover{background:var(--selected)}.btn.action-stop:hover{background:#e1e3df}
+.pending-section{margin-top:24px}.pending-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:start;padding:18px 0;border-top:1px solid var(--line)}
+.pending-row>div{min-width:0;overflow-wrap:anywhere}.pending-row h4{font-size:18px;margin-bottom:6px}.pending-row p{font-size:16px;margin:4px 0}
+@media(max-width:540px){.news-list{padding-left:12px;padding-right:12px}.feedback-launch{right:14px;bottom:14px}}

@@ -6,7 +6,7 @@
     user: null, admin: false, checkingAdmin: false, loading: true, connected: false,
     articles: [], archives: [], sources: [], settings: null, runtime: null,
     quota: null, lastRun: null, status: null, error: '', range: null, relatedIds: null,
-    knowledge: (D.knowledgeSeeds||[]).map(x=>({...x})), knowledgeLoading: false, knowledgeError: '', knowledgeLoaded: false, snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false, feedback: [],feedbackLoading:false,feedbackError:''
+    knowledge: (D.knowledgeSeeds||[]).map(x=>({...x})), knowledgeLoading: false, knowledgeError: '', knowledgeLoaded: false, snapshot: null, insights: null, removed: [], removedLoading: false, removedError: '', removedHasMore: false, feedback: [],feedbackLoading:false,feedbackError:'',pendingItems:[],pendingTotal:0,pendingCursor:null,pendingLoading:false,pendingError:''
   };
   let knowledgeTicket = 0;
   let db, auth, functions, epoch = 0, ticket = 0, removedRequest = 0, removedCursor = null;
@@ -128,6 +128,15 @@
     try{const page=await db.collection(T.feedback).orderBy('createdAt','desc').limit(100).get();if(request===epoch&&state.admin)emit({feedback:page.docs.map(normal),feedbackLoading:false});}
     catch(e){if(request===epoch&&state.admin)emit({feedbackLoading:false,feedbackError:friendly(e)});}
   }
+  let pendingTicket=0;
+  async function loadPending({more=false}={}){
+    if(!state.admin||more&&!state.pendingCursor)return;const request=++pendingTicket,authEpoch=epoch,prior=more?state.pendingItems:[];
+    emit({pendingLoading:true,pendingError:''});
+    try{const result=await call(D.functions.source,{operation:'pending',...(more?{cursor:state.pendingCursor}:{})});if(request!==pendingTicket||authEpoch!==epoch||!state.admin)return;
+      emit({pendingItems:[...new Map([...prior,...(result.items||[])].map(x=>[x.id,x])).values()],pendingTotal:result.total||0,pendingCursor:result.cursor||null,pendingLoading:false});
+    }catch(e){if(request===pendingTicket&&authEpoch===epoch&&state.admin)emit({pendingLoading:false,pendingError:friendly(e)});}
+  }
+
   async function refreshAdmin() {
     if (!state.admin) return;
     const request = epoch;
@@ -139,9 +148,10 @@
       db.collection(T.runs).orderBy('startedAt', 'desc').limit(1).get()
     ]);
     if (request !== epoch || !state.admin) return;
-    emit({ sources: sources.docs.map(normal), settings: settings.exists ? settings.data() : null,
+    emit({ sources: sources.docs.map(normal).filter(x=>{try{return !/(^|\.)(bis\.org|finextra\.com)$/i.test(new URL(x.url).hostname)}catch{return true}}), settings: settings.exists ? settings.data() : null,
       runtime: runtime?.exists ? runtime.data() : null, quota: quota?.exists ? quota.data() : null,
       lastRun: runs.empty ? null : normal(runs.docs[0]) });
+    await loadPending();
   }
 
   async function refresh() {
@@ -167,7 +177,7 @@
     listeners.push(fn); fn({ ...state });
     return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
   }
-  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, loadFeedback, refresh, refreshAdmin, call, signIn, signOut, friendly };
+  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, loadFeedback, loadPending, refresh, refreshAdmin, call, signIn, signOut, friendly };
 
   try {
     if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
@@ -181,7 +191,7 @@
       ++removedRequest; removedCursor = null;
       emit({ user: user ? { uid: user.uid, email: user.email } : null, admin: false, checkingAdmin: !!user,
         sources: [], settings: null, runtime: null, quota: null, lastRun: null,
-        removed: [], removedLoading: false, removedError: '', removedHasMore: false, feedback:[],feedbackLoading:false,feedbackError:'' });
+        removed: [], removedLoading: false, removedError: '', removedHasMore: false, feedback:[],feedbackLoading:false,feedbackError:'',pendingItems:[],pendingTotal:0,pendingCursor:null,pendingLoading:false,pendingError:'' });
       if (!user) return;
       try {
         const admin = await db.doc('admins/' + user.uid).get();
