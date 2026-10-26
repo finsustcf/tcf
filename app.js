@@ -75,7 +75,7 @@
     const node=$('highlights');
     if (!['previous','archive'].includes(state.mode) || B().loading || B().error) { node.hidden=true;node.innerHTML='';return; }
     node.hidden=false;const points=U.highlights(periodItems(),B().insights);
-    node.innerHTML=`<div class="section-heading"><h2 id="highlights-title">${scopeLabel()}重點</h2></div>${points.length?`<div class="highlight-list">${points.map((item,index)=>`<article class="highlight"><span class="highlight-number">${index+1}</span><div class="highlight-copy"><h3>${esc(item.title)}</h3><p>${esc(item.detail)}</p></div></article>`).join('')}</div>`:'<p class="small-note">'+(periodItems().length?'這份週報尚未完成重點整理。':'這段期間尚無收錄資訊。')+'</p>'}`;
+    node.innerHTML=`<div class="section-heading"><h2 id="highlights-title">${scopeLabel()}重點</h2></div>${points.length?`<div class="highlight-list">${points.map((item,index)=>`<article class="highlight"><span class="highlight-number">${index+1}</span><div class="highlight-copy"><h3>${esc(item.title)}</h3><p>${esc(item.detail)}</p></div></article>`).join('')}</div>`:'<p class="small-note">'+esc(periodItems().length?(B().snapshot?.highlightsError?(B().admin?'重點未完成：'+B().snapshot.highlightsError:'這份週報的重點整理暫未完成。'):'這份週報尚未產生重點。'):'這段期間尚無收錄資訊。')+'</p>'}`;
   }
   function renderList() {
     const all = periodItems(), items = filtered();
@@ -169,7 +169,7 @@
 
   function settingsDialog() {
     if (!B().admin) return;
-    const backend = B(), settings = backend.settings || {}, run = backend.lastRun;
+    const backend = B(), settings = backend.settings || {}, run = backend.lastRun;const week=backend.archives.find(x=>x.periodStart===U.bounds().from);const hasPoints=!!week?.insights?.insights?.length;
     const ready = !!backend.settings && (!D.requiresUpgrade || settings.version === 3);
     const sourceRows = media => {
       const sources = backend.sources.filter(source => (source.type === '新聞媒體') === media);
@@ -192,6 +192,7 @@
     } else {
       content = `<section class="settings-section"><div class="schedule-row"><span>資訊蒐集</span><strong>每天 08:00、12:00、16:00</strong></div><div class="schedule-row"><span>上週週報整理</span><strong>週一 00:00 啟動</strong></div><div class="pipeline-state"><span class="status-dot ${settings.enabled ? 'enabled' : ''}"></span>自動更新${settings.enabled ? '已開啟' : '尚未開啟'}</div>
         <div class="settings-actions">${!ready ? `<button class="btn btn-primary" data-action="initialize" ${state.busy ? 'disabled' : ''}>啟用平台與預設來源</button>` : `<button class="btn ${settings.enabled?'action-stop':'action-start'}" data-action="toggle-pipeline" ${state.busy ? 'disabled' : ''}>${settings.enabled ? '暫停自動更新' : '開啟自動更新'}</button><button class="btn" data-action="collect" ${state.busy ? 'disabled' : ''}>${state.busy ? '處理中…' : '立即更新'}</button><button class="btn" data-action="build-weekly" ${state.busy ? 'disabled' : ''}>重新彙整上週週報</button>`}</div>
+        <section class="run-status"><h3>上週週報整理狀態</h3><p>${week?`文章已封存 ${week.count||0} 則｜${hasPoints?(week.highlightsError?'沿用先前重點，本次整理未完成':'重點已完成'):week.count?'重點未完成':'期間內沒有資訊'}`:'尚未封存上週週報'}</p>${week&&week.count&&(week.highlightsError||!hasPoints)?`<p class="form-error">${esc(week.highlightsError||'重點尚未產生，請重新彙整上週週報。')}</p>`:''}</section>
         ${backend.runtime?.message ? `<p class="status-message">${esc(backend.runtime.message)}</p>` : ''}
         ${run ? `<div class="run-status"><h3>最近一次更新</h3><p>${time(run.startedAt)}・新增 ${run.created||0} 則${run.state==='running'?'・執行中':''}</p>${run.message?`<p>${esc(run.message)}</p>`:''}</div>`:''}${pendingSection()}
         </section>`;
@@ -279,7 +280,7 @@
       case 'skip-pending': {
         const item=(B().pendingItems||[]).find(x=>x.id===id);if(!item)break;
         if(!window.confirm(`略過「${item.title}」？\n\n此篇將停止後續處理，並從待處理列表移除。`))break;
-        await task('pipeline',{operation:'skip',id},'已略過，此篇不再排入處理。');break;
+        state.busy=true;try{await window.PlatformBackend.skipPending(id);toast('已略過，此篇不再排入處理。');}catch(e){toast(e.message);}finally{state.busy=false;if(B().admin&&$('settings-dialog').open)settingsDialog();}break;
       }
       case 'more-pending': await window.PlatformBackend.loadPending({more:true});break;
       case 'reload-pending': await window.PlatformBackend.loadPending();break;

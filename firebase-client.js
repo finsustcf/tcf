@@ -137,6 +137,13 @@
     }catch(e){if(request===pendingTicket&&authEpoch===epoch&&state.admin)emit({pendingLoading:false,pendingError:friendly(e)});}
   }
 
+  async function skipPending(id){
+    if(!state.admin)throw Error('請先登入管理帳號。');const authEpoch=epoch;
+    const result=await call(D.functions.pipeline,{operation:'skip',id});
+    if(authEpoch===epoch&&state.admin){emit({pendingItems:state.pendingItems.filter(x=>x.id!==id),pendingTotal:Math.max(0,state.pendingTotal-1)});await loadPending();}
+    return result;
+  }
+
   async function refreshAdmin() {
     if (!state.admin) return;
     const request = epoch;
@@ -177,7 +184,7 @@
     listeners.push(fn); fn({ ...state });
     return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
   }
-  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, loadFeedback, loadPending, refresh, refreshAdmin, call, signIn, signOut, friendly };
+  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, loadFeedback, loadPending, skipPending, refresh, refreshAdmin, call, signIn, signOut, friendly };
 
   try {
     if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
