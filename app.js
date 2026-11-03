@@ -17,7 +17,7 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
   const state = { page: 'weekly', mode: 'previous', ...U.bounds(), search: '', topic: '', region: '', type: '',
-    selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, feedbackBusy:false,feedbackRequestId:null,busy: false };
+    selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, feedbackBusy:false,feedbackRequestId:null,historyStatus:null,busy: false };
   let timer, returnFocus, accountRequested = false, previousUID = null, previousAdmin = false;
 
   const periodItems = () => B().articles.filter(item => U.articleDay(item) >= state.from && U.articleDay(item) <= state.to)
@@ -27,7 +27,7 @@
     const query = state.search.trim().toLocaleLowerCase();
     return periodItems().filter(item => (!state.focusIds || state.focusIds.has(item.id)) && (!state.topic || item.topics.includes(state.topic))
       && (!state.region || (item.region || 'unknown') === state.region) && (!state.type || item.type === state.type)
-      && (!query || [item.title, item.summary, item.source, item.implication, ...item.topics].join(' ').toLocaleLowerCase().includes(query)));
+      && (!query || [item.title, item.summary, item.source, item.bank, item.implication, ...item.topics].join(' ').toLocaleLowerCase().includes(query)));
   }
   function selectedItems() { return filtered().filter(item => state.selected.has(item.id)); }
   const formatPeriod = () => `${state.from.replaceAll('-', '/')} – ${(state.from.slice(0, 4) === state.to.slice(0, 4) ? state.to.slice(5) : state.to).replaceAll('-', '/')}`;
@@ -54,7 +54,7 @@
     $('main-content').innerHTML = `<div class="period-row">${state.page==='history'?`<div class="archive-controls"><button class="btn" data-action="history">返回週報列表</button></div>`:`<div class="period-tabs" role="group" aria-label="資料期間">
       ${[['previous', '上週週報'], ['current', '本週資訊'], ['custom', '自訂期間']].map(([mode, label]) => `<button class="period-tab ${(state.mode === mode) ? 'active' : ''}" data-action="period" data-mode="${mode}" aria-pressed="${state.mode === mode}">${label}</button>`).join('')}
       </div>`}<p class="updated">更新時間：${time(B().snapshot?.generatedAt || B().status?.lastSuccessAt)}</p></div>
-      <div id="custom-period"></div><section class="report-panel" aria-labelledby="report-period"><div class="report-identity">
+      <div id="custom-period"></div>${B().snapshot?.historyCoverage==='provisional'?'<p class="settings-note">歷史回補中：此週報為暫定版本，仍可能補入其他銀行新聞。</p>':''}<section class="report-panel" aria-labelledby="report-period"><div class="report-identity">
       <p class="report-label">${icon('calendar')}${modeLabel()}</p><h1 class="report-period" id="report-period">${U.period(state.from,state.to)}</h1><p class="report-count" id="report-count"></p>
       </div></section><section class="highlights" id="highlights" aria-labelledby="highlights-title"></section>
       <section class="information-panel" aria-labelledby="list-title"><div class="information-top"><h2 id="list-title">${scopeLabel()}資訊</h2><div class="export-area"><p class="export-label" id="export-label" aria-live="polite"></p><div class="export-buttons">
@@ -91,7 +91,7 @@
     $('result-count').textContent = items.length === all.length ? `${all.length} 則資訊` : `符合 ${items.length} / ${all.length} 則`;
     $('news-list').innerHTML = items.length ? `<div class="news-list">${items.slice(0, state.limit).map(item => `<article class="news-item ${state.selected.has(item.id) ? 'is-selected' : ''}" id="article-${esc(item.id)}">
       <label class="news-check"><input type="checkbox" data-select="${esc(item.id)}" ${state.selected.has(item.id) ? 'checked' : ''} aria-label="勾選：${esc(item.title)}"></label><div class="news-content">
-      <p class="news-meta"><time datetime="${U.articleDay(item)}">${esc(U.dateText(item))}</time>${item.region ? `<span class="dot">${esc(item.region)}</span>` : ''}<span class="dot">${esc(item.source)}</span></p>
+      <p class="news-meta"><time datetime="${U.articleDay(item)}">${esc(U.dateText(item))}</time>${item.region ? `<span class="dot">${esc(item.region)}</span>` : ''}<span class="dot">${esc(item.source)}</span>${item.bank?`<span class="dot">${esc(item.bank)}</span>`:''}</p>
       <h3><button class="article-title" data-action="detail" data-id="${esc(item.id)}">${esc(item.title)}</button></h3><p class="news-summary">${esc(item.summary)}</p>
       <div class="news-bottom"><span class="topic-tag">${esc(item.topics[0] || '相關資訊')}</span><button class="detail-link" data-action="detail" data-id="${esc(item.id)}">閱讀內容<span aria-hidden="true">→</span></button></div></div></article>`).join('')}</div>`
       : `<div class="empty-state"><h3>${all.length ? '沒有符合條件的資訊' : '這段期間尚無收錄資訊'}</h3><p>${all.length ? '請調整關鍵字、主題或來源地區。' : '可切換期間查看已收錄的資訊。'}</p><button class="btn" data-action="${all.length ? 'reset-filters' : state.mode === 'previous' ? 'history' : 'previous'}">${all.length ? '清除篩選' : state.mode === 'previous' ? '查看歷史週報' : '查看上週週報'}</button></div>`;
@@ -118,7 +118,7 @@
   }
   function renderHistory() {
     const error = B().error;
-    $('main-content').innerHTML = `<div class="history-heading"><h1>歷史週報</h1><p>選擇期間後，可閱讀與下載該週封存內容。</p></div>${error ? `<div class="empty-state"><h3>暫時無法讀取週報</h3><p>${esc(error)}</p><button class="btn" data-action="reload">重新讀取</button></div>` : B().archives.length ? `<div class="history-list">${B().archives.map(item => `<button class="history-card" data-action="archive" data-id="${esc(item.id)}" data-from="${esc(item.periodStart)}" data-to="${esc(item.periodEnd)}">${icon('archive')}<span class="history-copy"><strong>${esc(U.period(item.periodStart, item.periodEnd))}</strong><p>${item.count || 0} 則資訊・更新時間：${time(item.generatedAt)}</p></span><span class="history-open">閱讀週報${icon('arrow')}</span></button>`).join('')}</div>` : `<div class="empty-state"><h3>${B().loading ? '讀取週報中…' : '尚無封存週報'}</h3><p>每週一彙整上一週內容。</p></div>`}`;
+    $('main-content').innerHTML = `<div class="history-heading"><h1>歷史週報</h1><p>選擇期間後，可閱讀與下載該週封存內容。</p></div>${error ? `<div class="empty-state"><h3>暫時無法讀取週報</h3><p>${esc(error)}</p><button class="btn" data-action="reload">重新讀取</button></div>` : B().archives.length ? `<div class="history-list">${B().archives.map(item => `<button class="history-card" data-action="archive" data-id="${esc(item.id)}" data-from="${esc(item.periodStart)}" data-to="${esc(item.periodEnd)}">${icon('archive')}<span class="history-copy"><strong>${esc(U.period(item.periodStart, item.periodEnd))}</strong><p>${item.count || 0} 則資訊・更新時間：${time(item.generatedAt)}${item.historyCoverage==='provisional'?'・歷史補抓中／暫定':''}</p></span><span class="history-open">閱讀週報${icon('arrow')}</span></button>`).join('')}</div>` : `<div class="empty-state"><h3>${B().loading ? '讀取週報中…' : '尚無封存週報'}</h3><p>每週一彙整上一週內容。</p></div>`}`;
   }
   function renderKnowledge(){
     $('main-content').innerHTML=`<h1 class="page-heading">知識庫</h1><section class="knowledge-panel"><form id="knowledge-filter" class="knowledge-filters" role="search"><label class="search-field"><span class="sr-only">搜尋名詞、縮寫、中譯或解釋</span>${icon('search')}<input id="knowledge-search" type="search" placeholder="搜尋名詞、縮寫、中譯或解釋" value="${esc(state.knowledgeSearch)}"></label><label><span class="sr-only">主題篩選</span><select id="knowledge-topic"><option value="">全部主題</option>${D.topics.map(x=>`<option ${state.knowledgeTopic===x?'selected':''}>${esc(x)}</option>`).join('')}</select></label></form><div class="glossary-head" aria-hidden="true"><span>名詞</span><span>縮寫</span><span>中譯</span><span>解釋</span></div><div id="knowledge-list"></div></section>`;renderKnowledgeList();
@@ -176,7 +176,32 @@
       return sources.length ? sources.map(source => `<div class="source-row"><div><a href="${esc(U.safeURL(source.url))}" target="_blank" rel="noopener noreferrer">${esc(source.name)}</a><small>${[U.articleRegion(source), source.type, source.enabled ? '使用中' : '已停用'].filter(Boolean).map(esc).join('・')}</small>${source.lastError ? `<small class="source-error">${esc(source.lastError)}</small>` : ''}</div><button class="btn ${source.enabled?'action-stop':'action-start'}" data-action="toggle-source" data-id="${esc(source.id)}" ${state.busy ? 'disabled' : ''}>${source.enabled ? '停用' : '啟用'}</button></div>`).join('') : '<p class="small-note">尚未設定此類來源。</p>';
     };
     let content;
-    if (state.settingsTab === 'sources') {
+    if (state.settingsTab === 'history') {
+      const hist=state.historyStatus;
+      content=`<section class="settings-section"><h3>歷史新聞與週報回補</h3>
+      <p class="small-note">自 2026/01/01 起逐步補齊。日常更新不受影響；歷史回補初始為關閉。現階段僅能提交已核對的原文網址，尚未完成全銀行自動搜尋。</p>
+      <div class="run-status"><p>歷史排程：<strong>${hist?(hist.enabled?'已啟用（每天 18:00、22:00）':'暫停'):'尚未讀取'}</strong></p>
+      <p>待處理：${hist?Number(hist.pending)||0:'—'} 則　已處理收錄：${hist?Number(hist.published)||0:'—'} 則</p></div>
+      <div class="settings-actions"><button class="btn" data-action="history-refresh">更新狀態</button>
+      <button class="btn" data-action="history-toggle" ${!hist?'disabled':''}>${hist?.enabled?'暫停歷史回補':'啟用歷史回補'}</button>
+      <button class="btn" data-action="history-run" ${!hist?.enabled?'disabled':''}>立即處理最多 2 則</button></div>
+      <details class="advanced-settings"><summary>提交 1 則已核實的歷史新聞（先做試跑）</summary>
+      <form id="history-stage-form" class="stack-form">
+      <label class="field">銀行名稱<input name="bank" required maxlength="100"></label>
+      <label class="field">文章標題<input name="title" required maxlength="180"></label>
+      <label class="field">來源名稱<input name="source" required maxlength="100"></label>
+      <label class="field">原始 HTTPS 網址<input name="url" type="url" required placeholder="https://"></label>
+      <label class="field">實際發布日期<input name="date" type="date" min="2026-01-01" max="${U.today()}" required></label>
+      <label class="field">來源類型<select name="type"><option>新聞媒體</option><option>同業公告</option><option>主管機關</option><option>相關機構</option></select></label>
+      <p class="small-note">基於網站安全，暫時只接受既有核准來源網域；不能以聚合頁連結替代原始報導。</p>
+      <p id="history-form-error" class="form-error" role="alert"></p>
+      <button class="btn btn-primary" type="submit">送交歷史待處理佇列</button></form></details>
+      <div class="run-status"><h3>重新建立指定歷史週報</h3>
+      <p class="small-note">需先確認該週候選新聞皆已處理。每週以星期一為起日，且必須是已結束的週次。新報表標示為「待補齊」。</p>
+      <label class="field">歷史週次（星期一）<input id="history-week" type="date" min="2025-12-29" max="${U.shift(U.bounds('current').from,-7)}"></label>
+      <label class="field"><input type="checkbox" id="history-force"> 明確同意重建已存在週報（舊版本不刪除）</label>
+      <button class="btn" data-action="history-report">建立歷史週報</button></div></section>`;
+    } else if (state.settingsTab === 'sources') {
       content = `<section class="source-group"><h3>主管機關、同業與相關機構</h3>${sourceRows(false)}<h3>新聞媒體</h3>${sourceRows(true)}<details class="advanced-settings"><summary>新增來源</summary>${sourceForm()}</details></section>`;
     } else if(state.settingsTab==='feedback'){
       content=`<section><h3>問題回報</h3><button class="btn" data-action="reload-feedback" ${backend.feedbackLoading?'disabled':''}>重新讀取</button>${backend.feedbackLoading?'<p role="status">讀取中…</p>':''}${backend.feedbackError?`<p role="alert">${esc(backend.feedbackError)}</p>`:''}${(backend.feedback||[]).map(x=>`<article class="feedback-item"><p class="small-note">${time(x.createdAt)}｜${esc(x.category)}</p><h4>${esc(x.email)}</h4><p class="feedback-message">${esc(x.message)}</p><p class="small-note">${esc(x.view)}｜${esc(x.page)}</p></article>`).join('')||(!backend.feedbackLoading?'<p>目前沒有問題回報。</p>':'')}<p class="small-note">顯示最近100筆；聯絡信箱與內容僅管理員可見。</p></section>`;
@@ -197,7 +222,7 @@
         ${run ? `<div class="run-status"><h3>最近一次更新</h3><p>${time(run.startedAt)}・新增 ${run.created||0} 則${run.state==='running'?'・執行中':''}</p>${run.message?`<p>${esc(run.message)}</p>`:''}</div>`:''}${pendingSection()}
         </section>`;
     }
-    $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊'], ['feedback', '問題回報']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
+    $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['history', '歷史回補'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊'], ['feedback', '問題回報']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
     showDialog($('settings-dialog'));
   }
   async function task(action, data, message) {
@@ -218,6 +243,19 @@
       document.querySelectorAll('#settings-dialog button').forEach(button => { button.disabled = false; });
       if ($('select-all')) renderSelection();
     }
+  }
+  async function historyTask(payload,success){
+    if(state.busy||!B().admin)return;
+    state.busy=true;
+    try{
+      const result=await window.PlatformBackend.call(D.functions.backfill,payload);
+      state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status'});
+      if(payload.operation==='report')await window.PlatformBackend.refresh();
+      toast(typeof success==='function'?success(result):success);
+      if($('settings-dialog').open)settingsDialog();
+      return result;
+    }catch(e){toast(e.message);const msg=$('history-form-error');if(msg)msg.textContent=e.message;}
+    finally{state.busy=false;}
   }
   function payload() {
     const articles=(state.selected.size?selectedItems():filtered()).map(U.reportArticle);
@@ -246,12 +284,16 @@
     catch(e){$('feedback-error').textContent=e.message;}
     finally{state.feedbackBusy=false;submit.disabled=false;submit.textContent='送出回報';}
   }
-  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'more-pending', 'reload-pending']);
+  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'more-pending', 'reload-pending', 'history-refresh', 'history-toggle', 'history-run', 'history-report']);
   document.addEventListener('click', async event => {
     const button = event.target.closest('[data-action]'); if (!button) return;
     event.preventDefault(); const action = button.dataset.action, id = button.dataset.id;
     if (adminActions.has(action) && (!B().admin || state.busy)) return;
     switch (action) {
+      case 'history-refresh': try{state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status'});settingsDialog();}catch(e){toast(e.message);}break;
+      case 'history-toggle': if(window.confirm(state.historyStatus?.enabled?'確認暫停歷史回補？日常更新不受影響。':'確認啟用每天 18:00 與 22:00 歷史回補？每次最多處理 8 則，仍受每日額度上限保護。'))await historyTask({operation:'configure',enabled:!state.historyStatus?.enabled},'歷史回補設定已更新。');break;
+      case 'history-run': await historyTask({operation:'run',limit:2},res=>`本次處理 ${res.processed||0} 則，新增 ${res.created||0} 則。`);break;
+      case 'history-report': {const week=$('history-week')?.value,force=$('history-force')?.checked===true;if(!week||!U.validDate(week)){toast('請選擇有效的歷史週次（星期一）。');break;}if(!window.confirm(`確認產生 ${week} 起該週的歷史週報？\n尚未搜尋完整的銀行資料仍可能漏收，產出的週報將標示為暫定版本。${force?'\n此操作會將新的封存版本設為目前版本。':''}`))break;await historyTask({operation:'report',periodStart:week,force},res=>res.existing?'該週已有週報；如需更新請明確勾選重建。':`歷史週報已建立，共 ${res.count||0} 則（暫定版本）。`);break;}
       case 'weekly': if(!['previous','current','custom'].includes(state.mode))await setPeriod('previous');else{state.page='weekly';frame();}break;
       case 'history': state.page='history';state.mode='history-list';state.customOpen=false;resetFilters();frame();break;
       case 'knowledge': state.page = 'knowledge'; frame(); if (!B().knowledgeLoaded) await window.PlatformBackend.loadKnowledge(); break;
@@ -271,7 +313,7 @@
       case 'clear-selection': state.selected.clear(); renderList(); break;
       case 'reload': await window.PlatformBackend.refresh(); break;
       case 'account': account(); break;
-      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
+      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='history'){try{state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status'});settingsDialog();}catch(e){toast(e.message);}} if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
       case 'reload-removed': await window.PlatformBackend.loadRemoved(); break;
       case 'more-removed': await window.PlatformBackend.loadRemoved({ more: true }); break;
       case 'restore': if ((B().removed || []).some(item => item.id === id)) await task('visibility', { id, published: true }, '資訊已還原，可切換至原發布日期查看。'); break;
@@ -329,7 +371,7 @@
   });
   document.addEventListener('submit', async event => {
     const form = event.target, id = form.id;
-    if (!['filter-form', 'knowledge-filter', 'date-form', 'source-form', 'article-form', 'edit-form', 'feedback-form'].includes(id)) return;
+    if (!['filter-form', 'knowledge-filter', 'date-form', 'source-form', 'article-form', 'edit-form', 'feedback-form', 'history-stage-form'].includes(id)) return;
     event.preventDefault(); if (id === 'filter-form' || id==='knowledge-filter') return;
     const values = Object.fromEntries(new FormData(form));
     if (id === 'date-form') {
@@ -337,6 +379,7 @@
       await setPeriod('custom', values.from, values.to); return;
     }
     if(id==='feedback-form'){await sendFeedback(form,values);return;}
+    if(id==='history-stage-form'){if(!B().admin)return;await historyTask({operation:'stage',records:[values]},result=>`已新增 ${result.accepted||0} 則歷史候選資訊，重複 ${result.duplicates||0} 則。`);return;}
     if (!B().admin || state.busy) return;
     if (id === 'source-form') await task('source', { ...values, enabled: true }, '來源已新增。');
     if (id === 'article-form') await task('ingest', values, result => {

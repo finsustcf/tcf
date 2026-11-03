@@ -36,7 +36,8 @@ window.PLATFORM_DATA = {
     "visibility": "setArticleReview",
     "feedback": "saveSource",
     "permanentDelete": "setArticleReview",
-    "compact": "generateWeeklyReport"
+    "compact": "generateWeeklyReport",
+    "backfill": "backfillControl"
   },
   "topics": [
     "數位無障礙",
