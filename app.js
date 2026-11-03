@@ -179,21 +179,21 @@
     if (state.settingsTab === 'history') {
       const hist=state.historyStatus;
       content=`<section class="settings-section"><h3>歷史新聞與週報回補</h3>
-      <p class="small-note">自 2026/01/01 起逐步補齊。日常更新不受影響；歷史回補初始為關閉。現階段僅能提交已核對的原文網址，尚未完成全銀行自動搜尋。</p>
-      <div class="run-status"><p>歷史排程：<strong>${hist?(hist.enabled?'已啟用（每天 18:00、22:00）':'暫停'):'尚未讀取'}</strong></p>
-      <p>待處理：${hist?Number(hist.pending)||0:'—'} 則　已處理收錄：${hist?Number(hist.published)||0:'—'} 則</p></div>
+      <p class="small-note">自 2026/01/01 起，依月份自動搜尋 39 家本國銀行及政府、新聞媒體、專業機構的公開報導。每天 18:00、20:00、22:00 自動接續；日常蒐集不受影響。公開搜尋可能有漏收，系統會標記未解析的來源。</p>
+      <div class="run-status"><p>歷史排程：<strong>${hist?(hist.enabled?'已啟用（每天 18:00、20:00、22:00）':'暫停'):'尚未讀取'}</strong></p>
+      <p>待處理：${hist?Number(hist.pending)||0:'—'} 則　已處理收錄：${hist?Number(hist.published)||0:'—'} 則</p><p>資料來源：${hist?Number(hist.bankCount)||39:'—'} 家本國銀行，合計 ${hist?Number(hist.sourceCount)||0:'—'} 個搜尋對象；歷史分析 AI 每日上限 ${hist?Number(hist.dailyAiCap)||0:'—'} 次。</p><p>搜尋進度：${hist?`${esc(hist.discoveryMonth||'')}／${esc(hist.discoverySource||'')}（第 ${Number(hist.discoveryDone)||0}／${Number(hist.discoveryTotal)||0} 組）`:'尚未讀取'}；已找到候選 ${hist?Number(hist.discoveryAdded)||0:'—'} 則，未解出原文 ${hist?Number(hist.discoveryUnresolved)||0:'—'} 則。</p></div>
       <div class="settings-actions"><button class="btn" data-action="history-refresh">更新狀態</button>
       <button class="btn" data-action="history-toggle" ${!hist?'disabled':''}>${hist?.enabled?'暫停歷史回補':'啟用歷史回補'}</button>
-      <button class="btn" data-action="history-run" ${!hist?.enabled?'disabled':''}>立即處理最多 2 則</button></div>
-      <details class="advanced-settings"><summary>提交 1 則已核實的歷史新聞（先做試跑）</summary>
+      <button class="btn" data-action="history-run" ${!hist?.enabled?'disabled':''}>立即搜尋並回補</button></div>
+      <details class="advanced-settings"><summary>手動補充公開新聞（選用，不影響自動搜尋）</summary>
       <form id="history-stage-form" class="stack-form">
-      <label class="field">銀行名稱<input name="bank" required maxlength="100"></label>
+      <label class="field">銀行名稱（若適用）<input name="bank" maxlength="100"></label>
       <label class="field">文章標題<input name="title" required maxlength="180"></label>
       <label class="field">來源名稱<input name="source" required maxlength="100"></label>
       <label class="field">原始 HTTPS 網址<input name="url" type="url" required placeholder="https://"></label>
       <label class="field">實際發布日期<input name="date" type="date" min="2026-01-01" max="${U.today()}" required></label>
       <label class="field">來源類型<select name="type"><option>新聞媒體</option><option>同業公告</option><option>主管機關</option><option>相關機構</option></select></label>
-      <p class="small-note">基於網站安全，暫時只接受既有核准來源網域；不能以聚合頁連結替代原始報導。</p>
+      <p class="small-note">接受安全的公開 HTTPS 原始文章網址，不限定既有來源；銀行名稱可留空。不可使用內網、IP 位址或聚合頁代替原始報導。</p>
       <p id="history-form-error" class="form-error" role="alert"></p>
       <button class="btn btn-primary" type="submit">送交歷史待處理佇列</button></form></details>
       <div class="run-status"><h3>重新建立指定歷史週報</h3>
@@ -202,7 +202,10 @@
       <label class="field"><input type="checkbox" id="history-force"> 明確同意重建已存在週報（舊版本不刪除）</label>
       <button class="btn" data-action="history-report">建立歷史週報</button></div></section>`;
     } else if (state.settingsTab === 'sources') {
-      content = `<section class="source-group"><h3>主管機關、同業與相關機構</h3>${sourceRows(false)}<h3>新聞媒體</h3>${sourceRows(true)}<details class="advanced-settings"><summary>新增來源</summary>${sourceForm()}</details></section>`;
+      content = `<section class="source-group"><h3>主管機關、同業與相關機構（既有每日更新）</h3>${sourceRows(false)}<h3>新聞媒體（既有每日更新）</h3>${sourceRows(true)}<details class="advanced-settings"><summary>新增每日新聞來源</summary>${sourceForm()}</details>
+      <h3>歷史自動回補來源（另外維護，不占用每日來源清單）</h3><p class="small-note">從 2026/01/01 起輪流搜尋以下全部銀行與公開媒體，無需逐家新增。任何其他安全 HTTPS 新聞網址也可使用。</p>
+      ${state.historyStatus?.banks?.length?`<details class="advanced-settings"><summary>${state.historyStatus.banks.length} 家本國銀行（展開檢視）</summary>${state.historyStatus.banks.map(x=>`<div class="source-row"><div>${x.url?`<a target="_blank" rel="noopener noreferrer" href="${esc(U.safeURL(x.url))}">${esc(x.name)}</a>`:esc(x.name)}</div></div>`).join('')}</details>`:'<p class="small-note">銀行來源清單載入中。</p>'}
+      ${state.historyStatus?.agencySources?.length?`<details class="advanced-settings"><summary>政府監理與新聞媒體來源</summary>${[...state.historyStatus.agencySources,...state.historyStatus.mediaSources,...(state.historyStatus.internationalSources||[])].map(x=>`<div class="source-row"><div><a target="_blank" rel="noopener noreferrer" href="${esc(U.safeURL(x.url))}">${esc(x.name)}</a></div></div>`).join('')}</details>`:''}</section>`;
     } else if(state.settingsTab==='feedback'){
       content=`<section><h3>問題回報</h3><button class="btn" data-action="reload-feedback" ${backend.feedbackLoading?'disabled':''}>重新讀取</button>${backend.feedbackLoading?'<p role="status">讀取中…</p>':''}${backend.feedbackError?`<p role="alert">${esc(backend.feedbackError)}</p>`:''}${(backend.feedback||[]).map(x=>`<article class="feedback-item"><p class="small-note">${time(x.createdAt)}｜${esc(x.category)}</p><h4>${esc(x.email)}</h4><p class="feedback-message">${esc(x.message)}</p><p class="small-note">${esc(x.view)}｜${esc(x.page)}</p></article>`).join('')||(!backend.feedbackLoading?'<p>目前沒有問題回報。</p>':'')}<p class="small-note">顯示最近100筆；聯絡信箱與內容僅管理員可見。</p></section>`;
     } else if (state.settingsTab === 'removed') {
@@ -291,8 +294,8 @@
     if (adminActions.has(action) && (!B().admin || state.busy)) return;
     switch (action) {
       case 'history-refresh': try{state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status'});settingsDialog();}catch(e){toast(e.message);}break;
-      case 'history-toggle': if(window.confirm(state.historyStatus?.enabled?'確認暫停歷史回補？日常更新不受影響。':'確認啟用每天 18:00 與 22:00 歷史回補？每次最多處理 8 則，仍受每日額度上限保護。'))await historyTask({operation:'configure',enabled:!state.historyStatus?.enabled},'歷史回補設定已更新。');break;
-      case 'history-run': await historyTask({operation:'run',limit:2},res=>`本次處理 ${res.processed||0} 則，新增 ${res.created||0} 則。`);break;
+      case 'history-toggle': if(window.confirm(state.historyStatus?.enabled?'確認暫停歷史回補？日常更新不受影響。':'確認啟用每天 18:00、20:00、22:00 自動搜尋及回補？歷史分析額度與日常分析額度分開。'))await historyTask({operation:'configure',enabled:!state.historyStatus?.enabled},'歷史回補設定已更新。');break;
+      case 'history-run': await historyTask({operation:'run',limit:8},res=>`本次搜尋 ${res.queries||0} 組，加入佇列 ${res.queued||0} 則，已分析 ${res.processed||0} 則，收錄 ${res.created||0} 則。`);break;
       case 'history-report': {const week=$('history-week')?.value,force=$('history-force')?.checked===true;if(!week||!U.validDate(week)){toast('請選擇有效的歷史週次（星期一）。');break;}if(!window.confirm(`確認產生 ${week} 起該週的歷史週報？\n尚未搜尋完整的銀行資料仍可能漏收，產出的週報將標示為暫定版本。${force?'\n此操作會將新的封存版本設為目前版本。':''}`))break;await historyTask({operation:'report',periodStart:week,force},res=>res.existing?'該週已有週報；如需更新請明確勾選重建。':`歷史週報已建立，共 ${res.count||0} 則（暫定版本）。`);break;}
       case 'weekly': if(!['previous','current','custom'].includes(state.mode))await setPeriod('previous');else{state.page='weekly';frame();}break;
       case 'history': state.page='history';state.mode='history-list';state.customOpen=false;resetFilters();frame();break;
@@ -313,7 +316,7 @@
       case 'clear-selection': state.selected.clear(); renderList(); break;
       case 'reload': await window.PlatformBackend.refresh(); break;
       case 'account': account(); break;
-      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='history'){try{state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status'});settingsDialog();}catch(e){toast(e.message);}} if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
+      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='history'||state.settingsTab==='sources'){try{state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status'});settingsDialog();}catch(e){toast(e.message);}} if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
       case 'reload-removed': await window.PlatformBackend.loadRemoved(); break;
       case 'more-removed': await window.PlatformBackend.loadRemoved({ more: true }); break;
       case 'restore': if ((B().removed || []).some(item => item.id === id)) await task('visibility', { id, published: true }, '資訊已還原，可切換至原發布日期查看。'); break;
