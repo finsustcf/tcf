@@ -148,14 +148,14 @@
     if (!state.admin) return;
     const request = epoch;
     const [sources, settings, runtime, quota, runs] = await Promise.all([
-      db.collection(T.sources).limit(100).get(),
+      db.collection(T.sources).get(),
       db.doc(T.settings + '/pipeline').get(),
       D.queue ? db.doc(T.settings + '/runtime').get() : null,
       T.quotas ? db.doc(T.quotas + '/' + ReportUtils.today()).get() : null,
       db.collection(T.runs).orderBy('startedAt', 'desc').limit(1).get()
     ]);
     if (request !== epoch || !state.admin) return;
-    emit({ sources: sources.docs.map(normal).filter(x=>!x.deleted).filter(x=>{try{return !/(^|\.)(bis\.org|finextra\.com)$/i.test(new URL(x.url).hostname)}catch{return true}}), settings: settings.exists ? settings.data() : null,
+    emit({ sources: sources.docs.map(normal).filter(x=>!x.deleted), settings: settings.exists ? settings.data() : null,
       runtime: runtime?.exists ? runtime.data() : null, quota: quota?.exists ? quota.data() : null,
       lastRun: runs.empty ? null : normal(runs.docs[0]) });
     await loadPending();

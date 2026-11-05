@@ -166,8 +166,9 @@
     ${backend.pendingLoading?'<p class="small-note" role="status">正在更新狀態…</p>':''}</section>`;
   }
 
-  function settingsDialog(preserveView=false) {
+  function settingsDialog(preserveView=true) {
     const priorDialog=$('settings-dialog');
+    if(preserveView&&priorDialog.open&&document.activeElement?.closest('form')&&document.activeElement.closest('#settings-dialog'))return;
     const savedScroll=preserveView&&priorDialog.open?priorDialog.scrollTop:0;
     const openedSections=preserveView&&priorDialog.open?[...priorDialog.querySelectorAll('details')].map((node,i)=>node.open?i:-1).filter(i=>i>=0):[];
     if (!B().admin) return;
@@ -212,8 +213,8 @@
        <div class="run-status history-week"><div class="history-week-heading"><h3>歷史週報</h3>${week?`<span class="history-week-count">${countReady}／7 天完成</span>`:''}</div>
        ${week?`<p class="history-week-period">${esc(week.monday)} ～ ${esc(week.days[6])}</p>
        <div class="history-week-grid" aria-label="本週七天搜尋狀態">${weekDays.map((d,i)=>`<button type="button" class="history-week-day ${d.ready?'is-done':d.status==='not-started'?'is-unsearched':'is-pending'} ${state.historyDate===d.date?'is-current':''}" data-action="history-jump" data-date="${esc(d.date)}" aria-label="${esc(d.date)} ${d.ready?'已完成':d.status==='not-started'?'尚未搜尋':'尚未完成'}" title="查看 ${esc(d.date)} 搜尋結果"><span>${['一','二','三','四','五','六','日'][i]}</span><strong>${esc(d.date.slice(5).replace('-','/'))}</strong><small>${d.ready?'✓ 完成':d.status==='not-started'?'未搜尋':d.status==='running'||d.status==='queued'?'搜尋中':'需處理'}</small></button>`).join('')}</div>
-       <p class="small-note">${week.locked?'本週已定稿。':week.ready?(week.articleCount>0?`七天已完成，本週新聞資料庫已收錄 ${Number(week.articleCount)||0} 篇，可建立週報。`:'七天已搜尋，但本週尚無收錄新聞，可重新搜尋或手動新增資訊。'):'完成七天搜尋後，且有實際收錄新聞，才可建立歷史週報。'}</p>`:'<p class="small-note">選擇歷史日期，即可看到所在週次的七天進度。</p>'}
-       <button class="btn btn-primary" data-action="history-report" ${!week?.canFinalize||week?.locked||state.busy?'disabled':''}>${week?.locked?'已定稿':'建立並定稿週報'}</button></div>
+       <p class="small-note">${week.locked?'本週已定稿。':week.ready?(week.articleCount>0?`七天已完成，本週新聞資料庫已收錄 ${Number(week.articleCount)||0} 篇，可建立週報。`:'七天已搜尋，但本週尚無收錄新聞，可重新搜尋或手動新增資訊。'):'已有收錄新聞即可先建立暫定週報；完成七天處理後可正式定稿。'}</p>`:'<p class="small-note">選擇歷史日期，即可看到所在週次的七天進度。</p>'}
+       <button class="btn" data-action="history-draft" ${!week?.canDraft||week?.locked||state.busy?'disabled':''}>建立暫定週報</button><button class="btn btn-primary" data-action="history-report" ${!week?.canFinalize||week?.locked||state.busy?'disabled':''}>${week?.locked?'已定稿':'建立並定稿週報'}</button></div>
       </section>`;
     } else if (state.settingsTab === 'sources') {
       const hist=state.historyStatus||{},records=hist.sources||[],editing=records.find(x=>x.id===state.historyEditingSource);
@@ -221,7 +222,7 @@
        <label class="field">來源名稱<input name="name" required maxlength="100" value="${esc(item?.name||'')}"></label>
        <label class="field">公開來源網址<input name="url" required type="url" placeholder="https://" value="${esc(item?.url||'')}"></label>
        <label class="field">來源分類<select name="category">${['主管機關','銀行同業','相關機構','新聞媒體'].map(x=>`<option ${item?.category===x?'selected':''}>${x}</option>`).join('')}</select></label>
-       <p class="small-note">僅接受公開 HTTPS 網址。新增來源預設關閉，之後可隨時啟用。</p><p id="history-form-error" class="form-error" role="alert"></p>
+       <p class="small-note">僅接受公開 HTTPS 網址。新增來源預設啟用，之後可隨時啟用。</p><p id="history-form-error" class="form-error" role="alert"></p>
        <div class="settings-actions"><button class="btn btn-primary" type="submit">儲存來源</button><button class="btn" type="button" data-action="history-source-cancel">取消</button></div></form>`;
       content=`<section class="source-group"><h3>共用資訊來源（每日與歷史）</h3><p class="small-note">同一平台每日抓取與歷史回補都使用這份來源清單。新增、編輯、啟用、關閉或移除會同步影響兩種搜尋；舊新聞及週報不會刪除。</p>
        ${state.historyEditingSource==='new'||editing?sourceForm(editing):`<button class="btn btn-primary" data-action="history-source-add">新增來源</button>`}
@@ -247,15 +248,24 @@
         </section>`;
     }
     $('settings-dialog').innerHTML = `<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['history', '歷史回補'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊'], ['feedback', '問題回報']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div>${content}<div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`;
-    showDialog($('settings-dialog'));
+    if(!$('settings-dialog').open)showDialog($('settings-dialog'));
     if(preserveView){const current=$('settings-dialog');openedSections.forEach(i=>{const details=current.querySelectorAll('details')[i];if(details)details.open=true;});current.scrollTop=savedScroll;}
+  }
+  const commandTimers=new Map();
+  function watchCommand(id){
+    if(commandTimers.has(id))return;
+    const tick=async()=>{try{const result=await window.PlatformBackend.call(D.functions.source,{operation:'command-status',id});
+      if(['complete','failed','missing'].includes(result.status)){clearInterval(commandTimers.get(id));commandTimers.delete(id);toast(result.status==='complete'?'背景工作已完成。':result.message||'工作紀錄已結束。');if(result.status==='complete')await window.PlatformBackend.refresh();}
+    }catch(error){clearInterval(commandTimers.get(id));commandTimers.delete(id);toast('進度暫時無法讀取，背景工作仍可能執行中。');}};
+    commandTimers.set(id,setInterval(tick,5000));
   }
   async function task(action, data, message) {
     if (state.busy || !B().admin || !D.functions[action]) return;
     state.busy = true;
-    document.querySelectorAll('#settings-dialog button').forEach(button => { button.disabled = true; });
+    const activeButton=document.activeElement?.closest('button');if(activeButton)activeButton.disabled=true;
     try {
       const result = await window.PlatformBackend.call(D.functions[action], data);
+      if(result.accepted){watchCommand(result.id);toast('工作已接收，正在背景處理。');return result;}
       await window.PlatformBackend.refresh();
       if (state.settingsTab === 'removed' && B().admin) await window.PlatformBackend.loadRemoved();
       toast(typeof message === 'function' ? message(result) : message);
@@ -265,7 +275,7 @@
       toast(error.message); const messageNode = $('form-error'); if (messageNode) messageNode.textContent = error.message;
     } finally {
       state.busy = false;
-      document.querySelectorAll('#settings-dialog button').forEach(button => { button.disabled = false; });
+      if(activeButton?.isConnected)activeButton.disabled=false;
       if ($('select-all')) renderSelection();
     }
   }
@@ -276,7 +286,7 @@
       const result=await window.PlatformBackend.call(D.functions.backfill,payload);
       state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status',date:state.historyDate});
       if(payload.operation==='report')await window.PlatformBackend.refresh();
-      toast(typeof success==='function'?success(result):success);
+      if(result.accepted){watchCommand(result.id);toast('工作已接收，正在背景處理。');}else toast(typeof success==='function'?success(result):success);
       if($('settings-dialog').open)settingsDialog();
       return result;
     }catch(e){toast(e.message);const msg=$('history-form-error');if(msg)msg.textContent=e.message;}
@@ -345,12 +355,13 @@
     catch(e){$('feedback-error').textContent=e.message;}
     finally{state.feedbackBusy=false;submit.disabled=false;submit.textContent='送出回報';}
   }
-  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'more-pending', 'reload-pending', 'history-report', 'history-jump', 'history-skip-item', 'history-source-add', 'history-source-edit', 'history-source-cancel', 'history-source-toggle', 'history-source-remove', 'daily-source-edit', 'daily-source-remove']);
+  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'more-pending', 'reload-pending', 'history-report', 'history-draft', 'history-jump', 'history-skip-item', 'history-source-add', 'history-source-edit', 'history-source-cancel', 'history-source-toggle', 'history-source-remove', 'daily-source-edit', 'daily-source-remove']);
   document.addEventListener('click', async event => {
     const button = event.target.closest('[data-action]'); if (!button) return;
     event.preventDefault(); const action = button.dataset.action, id = button.dataset.id;
-    if (adminActions.has(action) && (!B().admin || state.busy)) return;
+    if (adminActions.has(action) && (!B().admin || (state.busy&&!['settings-tab','history-jump'].includes(action)))) return;
     switch (action) {
+      case 'history-draft':await historyTask({operation:'draft',periodStart:state.historyStatus?.week?.monday},'已建立暫定週報。');break;
       case 'history-jump': state.historyDate=button.dataset.date;await pollHistory();break;
       case 'history-skip-item':{
         const job=state.historyStatus?.job,item=job?.items?.find(x=>x.id===id);
@@ -437,7 +448,7 @@
   });
   document.addEventListener('change', async event => {
     const target = event.target;
-    if(target.id==='history-date'){state.historyDate=target.value;state.historyStatus=null;await pollHistory();return;}
+    if(target.id==='history-date'){target.blur();state.historyDate=target.value;state.historyStatus=null;await pollHistory();return;}
     if(target.id==='knowledge-topic'){state.knowledgeTopic=target.value;renderKnowledgeList();return;}
     if (target.id === 'topic-filter' || target.id === 'region-filter' || target.id==='type-filter') {
       state[{'topic-filter':'topic','region-filter':'region','type-filter':'type'}[target.id]] = target.value; state.focusIds = null;
