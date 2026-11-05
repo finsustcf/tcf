@@ -18,7 +18,7 @@
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
   const state = { page: 'weekly', mode: 'previous', ...U.bounds(), search: '', topic: '', region: '', type: '',
     selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, feedbackBusy:false,feedbackRequestId:null,historyStatus:null,historyDate:'2026-01-01',historyEditingSource:null,dailyEditingSource:null,busy: false };
-  let historyPollTimer=null; let timer, returnFocus, accountRequested = false, previousUID = null, previousAdmin = false;
+  let historyPollTimer=null; let historyPollInFlight=false; let historyResumeRetryAt=0; let timer, returnFocus, accountRequested = false, previousUID = null, previousAdmin = false;
 
   const periodItems = () => B().articles.filter(item => U.articleDay(item) >= state.from && U.articleDay(item) <= state.to)
     .map(item => ({ ...item, topics: Array.isArray(item.topics) ? item.topics : [], region: U.articleRegion(item) }))
@@ -182,8 +182,10 @@
     if (state.settingsTab === 'history') {
       const hist=state.historyStatus||{},job=hist.job,week=hist.week;
       const labels={queued:'準備搜尋',running:'搜尋中',complete:'已完成',partial:'文章處理尚未完成',failed:'搜尋失敗'};
-      const running=job&&['queued','running'].includes(job.status)&&!job.stale;
-      const needsRetry=job&&(['partial','failed'].includes(job.status)||job.stale||job.needsRefresh===true);
+      // A queued job waiting for Eventarc is not necessarily a failed search.
+      // The browser can safely advance queued or expired-lease jobs while open.
+      const running=job&&['queued','running'].includes(job.status);
+      const needsRetry=job&&(['partial','failed'].includes(job.status)||job.needsRefresh===true);
       const percent=job?.sourceCount?Math.min(100,Math.max(0,Math.round((Number(job.checked)||0)/job.sourceCount*100))):0;
       const stage=job?.phase==='analyze'?'AI 自動篩選與分析':`搜尋來源${job?.currentSource?'：'+job.currentSource:''}`;
       const startLabel=week?.locked?'本週已定稿':state.busy?'正在送出…':!job?'搜尋這一天':running?'搜尋中…':job.canRetryEmpty?'零候選重新搜尋':job.status==='complete'&&!job.needsRefresh?'已完成':job.needsRefresh?'依新版搜尋這一天':'重試失敗項目';
@@ -194,8 +196,9 @@
        <p class="small-note">選一天搜尋，系統會自動篩選、分析、去重並收錄。歷史與每日抓取共用資訊來源；如果整週沒有收錄新聞，請檢查搜尋明細並依新版規則重試，不可產生空白週報。</p>
        <form id="history-date-form" class="history-date-form stack-form"><label class="field">搜尋日期<input id="history-date" name="date" type="date" min="2025-12-29" max="${U.today()}" required value="${esc(state.historyDate)}"></label>
        <button class="btn btn-primary" type="submit" ${disabledStart?'disabled':''}>${startLabel}</button></form>
-       ${job?`<div class="run-status" role="status" aria-live="polite"><h3>${esc(state.historyDate)} ・ ${esc(job.stale?'搜尋中斷':labels[job.status]||job.status)}</h3>
+       ${job?`<div class="run-status" role="status" aria-live="polite"><h3>${esc(state.historyDate)} ・ ${esc(job.stale?'等待接續搜尋':labels[job.status]||job.status)}</h3>
        ${running?`<p>${esc(stage)}・進度自動更新</p>`:''}
+       ${job.stale?'<p class="small-note">雲端工作回應較慢，正在嘗試安全接續。請先保持管理頁面開啟；這不代表新聞已搜尋失敗。</p>':''}
        <div class="history-progress"><span style="width:${percent}%"></span></div>
        <p>已檢查來源：${Number(job.checked)||0}／${Number(job.sourceCount)||0} ・ 候選文章：${Number(job.candidates)||0} 篇</p>
        <p>新增：${Number(job.added)||0} ・ 重複：${Number(job.duplicates)||0} ・ 已處理：${Number(job.processed)||0} ・ 收錄：${Number(job.published)||0} ・ 排除：${Number(job.excluded)||0}</p>
@@ -276,13 +279,42 @@
       if($('settings-dialog').open)settingsDialog();
       return result;
     }catch(e){toast(e.message);const msg=$('history-form-error');if(msg)msg.textContent=e.message;}
-    finally{state.busy=false;if($('settings-dialog').open&&['history','sources'].includes(state.settingsTab))settingsDialog(true);}
+    finally{
+      state.busy=false;
+      if($('settings-dialog').open&&['history','sources'].includes(state.settingsTab))settingsDialog(true);
+      if(['start','retry'].includes(payload.operation))window.setTimeout(pollHistory,0);
+    }
   }
   async function pollHistory(){
-    if(!B().admin||!$('settings-dialog').open||!['history','sources'].includes(state.settingsTab)||state.busy)return;
-    try{state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status',date:state.historyDate});
-      if($('settings-dialog').open&&state.settingsTab==='history')settingsDialog(true);}
-    catch(e){console.warn('歷史狀態暫時無法讀取',e.message);}
+    if(historyPollInFlight||!B().admin||!$('settings-dialog').open||!['history','sources'].includes(state.settingsTab)||state.busy)return;
+    historyPollInFlight=true;
+    const date=state.historyDate;
+    try{
+      const result=await window.PlatformBackend.call(D.functions.backfill,{operation:'status',date});
+      if(date!==state.historyDate)return; // Never replace a newer selected day's status.
+      state.historyStatus=result;
+      if($('settings-dialog').open&&state.settingsTab==='history')settingsDialog(true);
+      const job=result?.job;
+      // Eventarc remains the normal self-driving path. This browser-assisted
+      // path makes one bounded unit of progress if the trigger never fires.
+      // It cannot create/retry jobs or alter finalized reports.
+      const needsHelp=job&&(job.status==='queued'||(job.status==='running'&&job.stale));
+      if(needsHelp&&state.settingsTab==='history'&&Date.now()>=historyResumeRetryAt){
+        try{
+          await window.PlatformBackend.call(D.functions.backfill,{operation:'advance',date});
+          historyResumeRetryAt=0;
+          if(date===state.historyDate){
+            state.historyStatus=await window.PlatformBackend.call(D.functions.backfill,{operation:'status',date});
+            if($('settings-dialog').open&&state.settingsTab==='history')settingsDialog(true);
+          }
+        }catch(error){
+          // Avoid hammering the callable on a network/permission failure.
+          historyResumeRetryAt=Date.now()+45000;
+          console.warn('歷史搜尋備援接續未完成',error.message);
+        }
+      }
+    }catch(e){console.warn('歷史狀態暫時無法讀取',e.message);}
+    finally{historyPollInFlight=false;}
   }
   document.addEventListener('change',async event=>{
     if(event.target?.id!=='history-date'||!B().admin)return;
@@ -434,7 +466,7 @@
     if(id==='history-date-form'){
       if(!B().admin)return;state.historyDate=values.date;
       const prior=state.historyStatus?.job;
-      const resume=prior&&(prior.needsRefresh||prior.canRetryEmpty||['failed','partial'].includes(prior.status)||prior.stale);
+      const resume=prior&&(prior.needsRefresh||prior.canRetryEmpty||['failed','partial'].includes(prior.status));
       if(prior&&!resume){toast('這一天正在搜尋或已經完成。');return;}
       await historyTask({operation:resume?'retry':'start',date:state.historyDate},resume?'已重新啟動需要檢查的部分。':'已開始搜尋這一天。');return;
     }
