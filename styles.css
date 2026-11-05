@@ -581,3 +581,34 @@ input,select,textarea{max-width:100%}
 
 /* R8: highlight the only day-level outcome requested by the admin. */
 .history-day-result { font-size: 1.18rem; font-weight: 700; line-height: 1.6; margin: 0.7rem 0 1rem; }
+
+/* R10: contain long URLs and keep controls usable at narrow widths. */
+.source-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
+.source-copy,.source-operations,.settings-section,.history-admin,.history-copy,.report-identity{min-width:0}
+.source-copy a,.source-url,.pending-row h4,.status-details p,.admin-footer span{overflow-wrap:anywhere;word-break:break-word}
+.source-operations{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:240px}
+.source-operations .btn{white-space:nowrap;min-height:44px;padding:9px 12px}
+.status-details{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px}
+.status-details summary{cursor:pointer;font-size:16px;line-height:1.6;overflow-wrap:anywhere}
+.status-detail-list{max-height:360px;overflow:auto;margin-top:10px;padding-right:4px}
+.status-detail-list>p+p{margin-top:14px}
+.pending-row{grid-template-columns:minmax(0,1fr) auto;gap:12px}
+.pending-row h4{margin:0 0 6px}
+.settings-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+.settings-tabs .period-tab{min-width:0;white-space:normal;overflow-wrap:anywhere}
+.history-date-form .field,.field-pair>.field{min-width:0}
+.history-date-form input{width:100%;max-width:100%;min-width:0}
+@media(max-width:760px){.header-inner{flex-wrap:wrap;gap:14px}.brand{white-space:normal;min-width:0;max-width:100%}.main-nav{flex-wrap:wrap;gap:20px}.admin-link{margin-left:auto}}
+@media(max-width:570px){
+ dialog{width:calc(100vw - 20px);padding:28px 16px;max-width:100%}
+ .source-row{grid-template-columns:minmax(0,1fr);gap:8px}
+ .source-operations{justify-content:flex-start;max-width:none}
+ .settings-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .history-week-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+ .history-week-day strong{font-size:14px}.history-week-day small,.history-week-day span{font-size:12px}
+ .field-pair{grid-template-columns:minmax(0,1fr)}
+ .export-buttons{flex-wrap:wrap}.export-btn{min-width:80px}
+ .section-heading,.admin-footer{flex-wrap:wrap}.pending-row{grid-template-columns:minmax(0,1fr)}
+ .pending-row>.btn{justify-self:start}.schedule-row{flex-wrap:wrap;gap:4px}
+ .schedule-row strong{text-align:left}.brand{font-size:19px}
+}
