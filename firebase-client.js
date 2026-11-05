@@ -155,7 +155,7 @@
       db.collection(T.runs).orderBy('startedAt', 'desc').limit(1).get()
     ]);
     if (request !== epoch || !state.admin) return;
-    emit({ sources: sources.docs.map(normal).filter(x=>{try{return !/(^|\.)(bis\.org|finextra\.com)$/i.test(new URL(x.url).hostname)}catch{return true}}), settings: settings.exists ? settings.data() : null,
+    emit({ sources: sources.docs.map(normal).filter(x=>!x.deleted).filter(x=>{try{return !/(^|\.)(bis\.org|finextra\.com)$/i.test(new URL(x.url).hostname)}catch{return true}}), settings: settings.exists ? settings.data() : null,
       runtime: runtime?.exists ? runtime.data() : null, quota: quota?.exists ? quota.data() : null,
       lastRun: runs.empty ? null : normal(runs.docs[0]) });
     await loadPending();
