@@ -187,26 +187,25 @@
       const running=job&&['queued','running'].includes(job.status);
       const needsRetry=job&&(['partial','failed'].includes(job.status)||job.needsRefresh===true);
       const percent=job?.sourceCount?Math.min(100,Math.max(0,Math.round((Number(job.checked)||0)/job.sourceCount*100))):0;
-      const stage=job?.phase==='analyze'?'AI 自動篩選與分析':`搜尋來源${job?.currentSource?'：'+job.currentSource:''}`;
-      const startLabel=week?.locked?'本週已定稿':state.busy?'正在送出…':!job?'搜尋這一天':running?'搜尋中…':job.canRetryEmpty?'零候選重新搜尋':job.status==='complete'&&!job.needsRefresh?'已完成':job.needsRefresh?'依新版搜尋這一天':'重試失敗項目';
+      const stage=job?.phase==='analyze'?'正在分析並收錄新聞':'正在搜尋當天新聞';
+      const startLabel=week?.locked?'本週已定稿':state.busy?'正在送出…':!job?'搜尋這一天':running?'搜尋中…':job.canRetryEmpty?'再搜尋這一天':job.status==='complete'&&!job.needsRefresh?'已完成':job.needsRefresh?'依新版搜尋這一天':'重試失敗項目';
       const disabledStart=state.busy||running||week?.locked||(job?.status==='complete'&&!job.needsRefresh&&!job.canRetryEmpty);
       const weekDays=week?.dayResults||week?.days?.map(d=>({date:d,ready:!(week.missing||[]).includes(d),status:'not-started'}))||[];
       const countReady=weekDays.filter(d=>d.ready).length;
       content=`<section class="settings-section history-admin"><h3>歷史新聞回補</h3>
-       <p class="small-note">選一天搜尋，系統先查官方歷史頁、網站地圖及公開索引，再以發布者原文頁面核對日期後分析、去重並收錄。歷史與每日使用同一份資訊來源；若找不到原文且無日期覆蓋證據，會標為未完成，不會冒稱查無新聞。</p>
+       <p class="small-note">使用原本週報的新聞抓取與分析方式，補找過去的相關新聞。搜尋結束後，直接顯示當天收錄了幾篇。</p>
        <form id="history-date-form" class="history-date-form stack-form"><label class="field">搜尋日期<input id="history-date" name="date" type="date" min="2025-12-29" max="${U.today()}" required value="${esc(state.historyDate)}"></label>
        <button class="btn btn-primary" type="submit" ${disabledStart?'disabled':''}>${startLabel}</button></form>
-       ${job?`<div class="run-status" role="status" aria-live="polite"><h3>${esc(state.historyDate)} ・ ${esc(job.stale?'等待接續搜尋':labels[job.status]||job.status)}</h3>
-       ${running?`<p>${esc(stage)}・進度自動更新</p>`:''}
-       ${job.stale?'<p class="small-note">雲端工作回應較慢，正在嘗試安全接續。請先保持管理頁面開啟；這不代表新聞已搜尋失敗。</p>':''}
+       ${job?`<div class="run-status" role="status" aria-live="polite"><h3>${esc(state.historyDate)}</h3>
+       <p class="history-day-result">${Number(job.dayArticleCount)>0?`✅ 當天已抓到 ${Number(job.dayArticleCount)} 篇相關新聞`:running||job.stale?'正在搜尋，尚未收錄新聞':job.status==='complete'?'本次沒有抓到相關新聞':`目前尚未抓到，搜尋${job.status==='failed'?'遇到問題':'尚未完成'}`}</p>
+       ${running?`<p>${esc(stage)}・已搜尋 ${Number(job.checked)||0}／${Number(job.sourceCount)||0} 個來源</p>`:''}
        <div class="history-progress"><span style="width:${percent}%"></span></div>
-       <p>已檢查來源：${Number(job.checked)||0}／${Number(job.sourceCount)||0} ・ 候選文章：${Number(job.candidates)||0} 篇</p>
-       <p>新增：${Number(job.added)||0} ・ 重複：${Number(job.duplicates)||0} ・ 已處理：${Number(job.processed)||0} ・ 收錄：${Number(job.published)||0} ・ 排除：${Number(job.excluded)||0}</p>
-       ${job.lastError?`<p class="source-error">${esc(job.lastError)}</p>`:''}
-       ${job.status==='complete'?'<p class="history-success">這一天的來源搜尋與文章處理已結束；如本週仍無收錄，請確認搜尋與排除紀錄。</p>':''}
-       ${job.needsRefresh?'<p class="small-note">搜尋規則或啟用來源已有更新，這一天需重新檢查才會計入歷史週報。</p>':''}
-       ${job.sourceLogs?.length?`<details><summary>各來源搜尋結果（${job.sourceLogs.length}）</summary>${job.sourceLogs.map(x=>`<article class="history-log"><strong>${esc(x.name)} ・ ${x.status==='complete'?(Number(x.candidates)>0?'找到原文候選':'官網日期已核對・無候選'):'尚未成功找到可驗證原文'}</strong><p>候選 ${Number(x.candidates)||0} 篇${x.checked?.officialDateCoverage?' ・ 官網涵蓋此日':''}${x.checked?.rss?' ・ 公開索引已讀取':''}${x.checked?.official&&!x.checked?.officialDateCoverage?' ・ 官網已讀取':''}${Number(x.checked?.wordpressCount)?` ・ 歷史資料庫 ${Number(x.checked.wordpressCount)} 篇`:''}${Number(x.checked?.rssItems)?` ・ 索引 RSS ${Number(x.checked.rssItems)} 筆`:''}${Number(x.checked?.sitemapPages)?` ・ 官網網站地圖 ${Number(x.checked.sitemapPages)} 頁`:''}${Number(x.checked?.indexLinks)?` ・ 發現原文網址 ${Number(x.checked.indexLinks)} 筆`:''}${Number(x.checked?.articleChecked)?` ・ 已嘗試讀取原文 ${Number(x.checked.articleChecked)} 篇`:''}${Number(x.checked?.dateVerified)?` ・ 原文日期核對 ${Number(x.checked.dateVerified)} 篇`:''}${Number(x.checked?.pageDateMissing)?` ・ 原文缺發布日期 ${Number(x.checked.pageDateMissing)} 篇`:''}${Number(x.checked?.bingItems)?` ・ 備援索引 ${Number(x.checked.bingItems)} 篇`:''}${Number(x.checked?.bingResolved)?` ・ 備援原文 ${Number(x.checked.bingResolved)} 篇`:''}${Number(x.unresolved)?` ・ 無法解析原文 ${Number(x.unresolved)} 筆`:''}${Number(x.checked?.prefilterRejected)?` ・ 主題預篩排除 ${Number(x.checked.prefilterRejected)} 筆`:''}${Number(x.checked?.wrongDate)?` ・ 原文日期不符 ${Number(x.checked.wrongDate)} 筆`:''}</p>${x.error?`<p class="source-error">${esc(x.error)}</p>`:''}${(x.warnings||[]).map(w=>`<p class="small-note">${esc(w)}</p>`).join('')}${(x.links||[]).map(y=>`<p><a target="_blank" rel="noopener noreferrer" href="${esc(U.safeURL(y.url))}">${esc(y.title)}</a></p>`).join('')}</article>`).join('')}</details>`:''}
-       ${job.items?.length?`<details><summary>新聞分析紀錄（${job.items.length}）</summary>${job.items.map(x=>`<p><a target="_blank" rel="noopener noreferrer" href="${esc(U.safeURL(x.url))}">${esc(x.title)}</a> ・ ${esc(x.status)}${x.status==='pending'&&['partial','failed'].includes(job.status)&&!job.stale?` <button type="button" class="btn history-skip-item" data-action="history-skip-item" data-id="${esc(x.id)}">略過此篇</button>`:''}</p>`).join('')}</details>`:''}
+       ${!running&&Number(job.dayArticleCount)>0?'<p class="small-note">以上包含原本每日或週報已收錄的新聞，不重複計算。</p>':''}
+       ${!running&&Number(job.dayArticleCount)===0&&job.status==='complete'?'<p class="small-note">本次未找到符合條件的新聞，不代表當天絕對沒有新聞；可以按「再搜尋這一天」。</p>':''}
+       ${job.stale?'<p class="small-note">正在嘗試接續未完成的工作，請保持此頁開啟。</p>':''}
+       ${job.lastError&&['failed','partial'].includes(job.status)?`<p class="small-note">有來源或分析未完成，仍可稍後重新搜尋。</p>`:''}
+       ${job.needsRefresh?'<p class="small-note">來源有更新，可重新搜尋這一天。</p>':''}
+       ${job.items?.some(x=>x.status==='pending'&&['partial','failed'].includes(job.status))?`<details><summary>處理無法完成的文章（選用）</summary>${job.items.filter(x=>x.status==='pending').map(x=>`<p>${esc(x.title)} <button type="button" class="btn history-skip-item" data-action="history-skip-item" data-id="${esc(x.id)}">略過</button></p>`).join('')}</details>`:''}
        </div>`:''}
        <div class="run-status history-week"><div class="history-week-heading"><h3>歷史週報</h3>${week?`<span class="history-week-count">${countReady}／7 天完成</span>`:''}</div>
        ${week?`<p class="history-week-period">${esc(week.monday)} ～ ${esc(week.days[6])}</p>

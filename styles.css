@@ -578,3 +578,6 @@ input,select,textarea{max-width:100%}
 .history-week-day.is-current{outline:2px solid var(--brand);outline-offset:1px}
 .history-week-day:hover{border-color:var(--brand)}
 @media(max-width:570px){.history-date-form{grid-template-columns:1fr}.history-week-grid{gap:3px}.history-week-day{min-height:76px;padding:6px 1px}.history-week-day strong{font-size:11px}.history-week-day small{font-size:10px}.history-week-day span{font-size:11px}}
+
+/* R8: highlight the only day-level outcome requested by the admin. */
+.history-day-result { font-size: 1.18rem; font-weight: 700; line-height: 1.6; margin: 0.7rem 0 1rem; }
