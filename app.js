@@ -77,7 +77,7 @@
   function renderHighlights() {
     const node=$('highlights'),items=periodItems();
     node.hidden=!['current','previous','archive'].includes(state.mode)||B().loading||!!B().error||!items.length;
-    node.innerHTML=node.hidden?'':`<h2 id="highlights-title">收錄新聞一覽</h2><ol class="news-index">${items.map(item=>`<li><a href="#article-${esc(item.id)}" data-action="jump-article" data-id="${esc(item.id)}">${esc(item.title)}</a></li>`).join('')}</ol>`;
+    node.innerHTML=node.hidden?'':`<h2 id="highlights-title">收錄新聞一覽</h2><ol class="news-index">${items.map(item=>`<li><a href="#article-${esc(item.id)}" data-action="jump-article" data-id="${esc(item.id)}"><span>${esc(item.title)}</span><time datetime="${esc(U.articleDay(item))}">${esc(U.articleDay(item).replaceAll('-','/'))}</time></a></li>`).join('')}</ol>`;
   }
   function jumpArticle(id) {
     const items=filtered();
@@ -136,8 +136,16 @@
   }
   function weekSearchNote(week) {
     if(!week)return '';
-    const dates=week.dayResults.filter(day=>day.status==='not-started').map(day=>day.date.slice(5).replace('-','/'));
-    return `<p class="small-note">${dates.length?'尚未搜尋：'+esc(dates.join('、')):'本週每天都已搜尋過。'}</p>`;
+    const dates=week.dayResults.filter(day=>day.date<=U.today()&&!(day.searched??day.status!=='not-started')).map(day=>day.date.slice(5).replace('-','/'));
+    return `<p class="small-note">${dates.length?'尚未搜尋：'+esc(dates.join('、')):(week.dayResults.some(day=>day.date>U.today())?'本週截至今天都已搜尋過。':'本週每天都已搜尋過。')}</p>`;
+  }
+  function historyDayPicker(week) {
+    if(!week?.dayResults)return '';
+    return `<div class="history-week-grid" aria-label="選擇回補日期">${week.dayResults.map(day=>{
+      const active=day.date===state.historyDate;
+      const label=!(day.searched??day.status!=='not-started')?'未搜尋':'已搜尋';
+      return `<button type="button" class="history-week-day ${active?'is-current':''}" data-action="history-jump" data-date="${esc(day.date)}" aria-pressed="${active}" ${day.date>U.today()?'disabled':''}><strong>${esc(day.date.slice(5).replace('-','/'))}</strong><small>${esc(label)}</small></button>`;
+    }).join('')}</div>`;
   }
   async function readWeek(from) {
     if(!B().admin)return;
@@ -150,14 +158,18 @@
     $('main-content').innerHTML=`<div class="history-heading"><h1>歷史週報</h1></div>
       <form class="date-form" id="history-week-form"><label>選擇該週任一天<input type="date" name="date" value="${esc(state.archiveDate||U.bounds('previous').from)}" min="${FIRST_DATE}" max="${U.bounds('previous').to}" required></label><button class="btn" type="submit">查看週報</button></form>`;
   }
+  const knowledgeTopics=[...new Set([...D.topics,'其他'])];
   function renderKnowledge(){
-    $('main-content').innerHTML=`<h1 class="page-heading">知識庫</h1><section class="knowledge-panel"><form id="knowledge-filter" class="knowledge-filters" role="search"><label class="search-field"><span class="sr-only">搜尋名詞、縮寫、中譯或解釋</span>${icon('search')}<input id="knowledge-search" type="search" placeholder="搜尋名詞、縮寫、中譯或解釋" value="${esc(state.knowledgeSearch)}"></label><label><span class="sr-only">主題篩選</span><select id="knowledge-topic"><option value="">全部主題</option>${D.topics.map(x=>`<option ${state.knowledgeTopic===x?'selected':''}>${esc(x)}</option>`).join('')}</select></label></form><div class="glossary-head" aria-hidden="true"><span>名詞</span><span>縮寫</span><span>中譯</span><span>解釋</span></div><div id="knowledge-list"></div></section>`;renderKnowledgeList();
+    $('main-content').innerHTML=`<h1 class="page-heading">知識庫</h1><section class="knowledge-panel"><form id="knowledge-filter" class="knowledge-filters" role="search"><label class="search-field"><span class="sr-only">搜尋名詞、縮寫、中譯或解釋</span>${icon('search')}<input id="knowledge-search" type="search" placeholder="搜尋名詞、縮寫、中譯或解釋" value="${esc(state.knowledgeSearch)}"></label><label><span class="sr-only">主題篩選</span><select id="knowledge-topic"><option value="">全部主題</option>${knowledgeTopics.map(x=>`<option ${state.knowledgeTopic===x?'selected':''}>${esc(x)}</option>`).join('')}</select></label></form><div class="glossary-head" aria-hidden="true"><span>名詞</span><span>縮寫</span><span>中譯</span><span>解釋</span></div><div id="knowledge-list"></div></section>`;renderKnowledgeList();
   }
   function renderKnowledgeList(){
     if(B().knowledgeLoading&&!(B().knowledge||[]).length){$('knowledge-list').innerHTML='<div class="loading" role="status">讀取知識庫中…</div>';return;}
     if(B().knowledgeError&&!(B().knowledge||[]).length){$('knowledge-list').innerHTML=`<div class="empty-state"><h2>暫時無法讀取知識庫</h2><p>${esc(B().knowledgeError)}</p><button class="btn" data-action="reload-knowledge">重新讀取</button></div>`;return;}
     const normalize=v=>String(v||'').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,''),q=normalize(state.knowledgeSearch);
-    const items=(B().knowledge||[]).map(x=>({...x,view:U.knowledgeFields(x)})).filter(x=>(!state.knowledgeTopic||(x.topics||[]).includes(state.knowledgeTopic))&&(!q||[x.view.term,x.view.abbreviation,x.view.translation,x.view.definition,...x.aliases||[]].some(v=>normalize(v).includes(q))));
+    const items=(B().knowledge||[]).map(x=>{
+      const topics=(Array.isArray(x.topics)?x.topics:[]).filter(topic=>knowledgeTopics.includes(topic));
+      return {...x,topics:topics.length?topics:['其他'],view:U.knowledgeFields(x)};
+    }).filter(x=>(!state.knowledgeTopic||x.topics.includes(state.knowledgeTopic))&&(!q||[x.view.term,x.view.abbreviation,x.view.translation,x.view.definition,...x.aliases||[]].some(v=>normalize(v).includes(q))));
     $('knowledge-list').innerHTML=(B().knowledgeError?`<p class="small-note" role="status">部分詞條無法更新：${esc(B().knowledgeError)}。已載入內容仍可查閱。</p>`:'')+(items.length?items.map(x=>`<article class="knowledge-term"><h2>${esc(x.view.term)}</h2><span class="abbr">${esc(x.view.abbreviation)}</span><span class="translation">${esc(x.view.translation)}</span><p>${esc(x.view.definition)}</p></article>`).join(''):'<div class="empty-state"><h2>沒有符合的詞條</h2><p>請調整關鍵字或主題。</p></div>');
   }
   function showDialog(node) { returnFocus = document.activeElement; if (!node.open) node.showModal(); node.scrollTop = 0; }
@@ -299,7 +311,7 @@
        ${job.needsRefresh?'<p class="small-note">來源有更新，可重新搜尋這一天。</p>':''}
        ${job.items?.some(x=>x.status==='pending'&&['partial','failed'].includes(job.status))?`<details><summary>處理無法完成的文章（選用）</summary>${job.items.filter(x=>x.status==='pending').map(x=>`<p>${esc(x.title)} <button type="button" class="btn history-skip-item" data-action="history-skip-item" data-id="${esc(x.id)}">略過</button></p>`).join('')}</details>`:''}
        </div>`:''}
-       <div class="run-status history-week" data-key="history-week-result"><h3>歷史週報</h3>${weekSearchNote(week)}
+       <div class="run-status history-week" data-key="history-week-result"><h3>歷史週報</h3>${historyDayPicker(week)}${weekSearchNote(week)}
        ${week?`<button class="btn" data-action="view-history-week" data-date="${esc(week.monday)}">查看這一週</button>`:''}</div>
       </section>`;
     } else if (state.settingsTab === 'sources') {
@@ -384,8 +396,9 @@
   async function selectHistoryDate(date){
     if(!U.validDate(date)||date<FIRST_DATE||date>U.today())return;
     state.historyReadFailed=false;
+    const input=$('history-date');if(input&&input.value!==date)input.value=date;
     const week=state.historyStatus?.week;
-    state.historyDate=date;state.historyStatus=week?.days.includes(date)?{week}:null;state.historyLoading=true;
+    state.historyDate=date;state.historyStatus=week?.dayResults?.some(day=>day.date===date)?{week}:null;state.historyLoading=true;
     settingsDialog(true);
     await pollHistory(true);
   }
@@ -469,7 +482,9 @@
       }
       case 'view-history-week': {
         const monday=button.dataset.date;close($('settings-dialog'));state.archiveDate=monday;
-        await setPeriod('archive',monday,U.shift(monday,6));break;
+        if(monday===U.bounds('current').from)await setPeriod('current');
+        else await setPeriod('archive',monday,U.shift(monday,6));
+        break;
       }
       case 'history-jump':await selectHistoryDate(button.dataset.date);break;
       case 'history-skip-item':{
