@@ -8,11 +8,6 @@ window.PLATFORM_DATA = {
   "requiresFacts": false,
   "requiresUpgrade": false,
   "summaryLimit": 1400,
-  "maxPerRun": 12,
-  "defaults": {
-    "dailyLimit": 20,
-    "maxPerRun": 6
-  },
   "collections": {
     "articles": "articles",
     "reports": "weeklyReports",
@@ -37,6 +32,7 @@ window.PLATFORM_DATA = {
     "feedback": "saveSource",
     "permanentDelete": "setArticleReview",
     "compact": "generateWeeklyReport",
+    "historyStatus": "tcfHistoryStatus",
     "backfill": "backfillControl"
   },
   "topics": [

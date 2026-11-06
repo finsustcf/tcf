@@ -612,3 +612,8 @@ input,select,textarea{max-width:100%}
  .pending-row>.btn{justify-self:start}.schedule-row{flex-wrap:wrap;gap:4px}
  .schedule-row strong{text-align:left}.brand{font-size:19px}
 }
+
+/* Keep the feedback area and submitting controls in place during updates. */
+#admin-action-status{position:sticky;top:0;z-index:2;background:var(--paper);height:2.75em;overflow:auto;margin:0 0 .5rem;font-size:.9rem;color:var(--muted)}
+#settings-dialog [aria-busy=true]{cursor:progress}
+.pending-row label{display:flex;align-items:center;gap:.45rem;margin-bottom:.35rem}
