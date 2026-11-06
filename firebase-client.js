@@ -46,40 +46,40 @@
     }
   }
 
-  async function loadArchives() {
-    const result = await db.collection(T.reports).orderBy('periodStart', 'desc').limit(100).get();
-    return result.docs.map(normal);
-  }
-
-  async function loadRange(from, to, { archiveId = null, preferArchive = false } = {}) {
+  async function loadRange(from, to, { preferArchive = false, quiet = false } = {}) {
     if (!db) return;
     const request = ++ticket;
-    emit({ loading: true, error: '', range: { from, to }, relatedIds: null, snapshot: null, insights: null, articles: [] });
+    if(!quiet)emit({ loading:true,error:'',range:{from,to,preferArchive},relatedIds:null,snapshot:null,insights:null,articles:[] });
     try {
-      const [archives, status] = await Promise.all([
-        loadArchives(), db.doc(T.status + '/collection').get()
+      const [status,report]=await Promise.all([
+        db.doc(T.status+'/collection').get().catch(()=>null),
+        preferArchive?db.doc(T.reports+'/'+from).get().catch(()=>null):null
       ]);
-      if(preferArchive&&!archiveId)archiveId=archives.find(x=>x.periodStart===from&&x.periodEnd===to)?.id||null;
-      let articles, snapshot = null, insights = null;
-      if (archiveId) {
-        snapshot = archives.find(item => item.id === archiveId);
-        if (!snapshot) throw Error('這份歷史週報已不存在，請重新整理。');
-        articles = await pages(db.collection(`${T.reports}/${snapshot.id}/versions/${snapshot.activeVersion}/items`).orderBy('order', 'asc'));
-        insights = snapshot.insights || null;
-      } else {
-        articles = await pages(db.collection(T.articles).where('published', '==', true)
-          .where('reportDate', '>=', from).where('reportDate', '<=', to).orderBy('reportDate', 'desc'));
-        const matching = archives.find(item => item.periodStart === from && item.periodEnd === to);
-        if (matching && matching.count === articles.length && articles.every(item => millis(item.updatedAt) <= millis(matching.generatedAt))) {
-          insights = null; // Live/custom ranges never inherit an archive's overall highlights.
-        }
-      }
-      if (request !== ticket) return;
-      emit({ loading: false, connected: true, articles: ReportUtils.sortArticles(articles),
-        archives, status: status.exists ? status.data() : null, snapshot, insights });
-    } catch (error) {
-      if (request === ticket) emit({ loading: false, connected: false, error: friendly(error) });
+      if(request!==ticket)return;
+      const archived=report?.exists?normal(report):null;
+      const snapshot=archived?.periodEnd===to&&archived.activeVersion?archived:null;
+      const query=snapshot
+        ?db.collection(`${T.reports}/${snapshot.id}/versions/${snapshot.activeVersion}/items`).orderBy('order','asc')
+        :db.collection(T.articles).where('published','==',true).where('reportDate','>=',from).where('reportDate','<=',to).orderBy('reportDate','desc');
+      const articles=await pages(query);
+      if(request===ticket)emit({loading:false,error:'',connected:true,articles:ReportUtils.sortArticles(articles),status:status?.exists?status.data():null,snapshot});
+    } catch(error) {
+      if(request===ticket&&!quiet)emit({loading:false,connected:false,error:friendly(error)});
     }
+  }
+
+  let currentCheck=false;
+  async function checkCurrent(){
+    if(!db||state.loading||state.relatedIds||state.range?.preferArchive||currentCheck)return;
+    const range=state.range;
+    if(!range)return;
+    currentCheck=true;
+    try {
+      const status=(await db.doc(T.status+'/collection').get()).data();
+      if(state.range!==range||!status)return;
+      if(millis(status.lastContentAt)>millis(state.status?.lastContentAt)||state.error)await loadRange(range.from,range.to,{quiet:!state.error});
+    } catch {}
+    finally {currentCheck=false;}
   }
 
   // Only admins can query removed articles. Never merge these into public state.
@@ -167,8 +167,8 @@
 
   async function refresh() {
     if(state.relatedIds){await loadRelated(state.relatedIds);if(state.admin)await refreshAdmin();return;}
-    const range = state.range || ReportUtils.bounds();
-    await loadRange(range.from, range.to, { archiveId: state.snapshot?.id });
+    const range = state.range || ReportUtils.bounds('current');
+    await loadRange(range.from, range.to, { preferArchive:range.preferArchive });
     if (state.admin) await refreshAdmin();
   }
 
@@ -188,15 +188,15 @@
     listeners.push(fn); fn({ ...state });
     return () => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); };
   }
-  window.PlatformBackend = { state, onState, loadRange, loadRelated, loadKnowledge, loadRemoved, loadFeedback, loadPending, applySkipped, skipPending, refresh, refreshAdmin, call, signIn, signOut, friendly };
+  window.PlatformBackend = { state, onState, loadRange, checkCurrent, loadRelated, loadKnowledge, loadRemoved, loadFeedback, loadPending, applySkipped, skipPending, refresh, refreshAdmin, call, signIn, signOut, friendly };
 
   try {
     if (!window.firebase || !window.FIREBASE_CONFIG) throw Error('連線元件未載入，請確認網路後重新整理。');
     const app = D.authAppName ? firebase.initializeApp(window.FIREBASE_CONFIG, D.authAppName)
       : firebase.initializeApp(window.FIREBASE_CONFIG);
     db = app.firestore(); auth = app.auth(); functions = app.functions(window.PLATFORM_REGION || 'asia-east1');
-    const range = ReportUtils.bounds();
-    loadRange(range.from, range.to, {preferArchive:true});
+    const range = ReportUtils.bounds('current');
+    loadRange(range.from, range.to);
     auth.onAuthStateChanged(async user => {
       const request = ++epoch;
       ++removedRequest; removedCursor = null;

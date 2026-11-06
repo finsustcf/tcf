@@ -617,3 +617,10 @@ input,select,textarea{max-width:100%}
 #admin-action-status{position:sticky;top:0;z-index:2;background:var(--paper);height:2.75em;overflow:auto;margin:0 0 .5rem;font-size:.9rem;color:var(--muted)}
 #settings-dialog [aria-busy=true]{cursor:progress}
 .pending-row label{display:flex;align-items:center;gap:.45rem;margin-bottom:.35rem}
+
+.news-index { margin: 12px 0 0; padding-inline-start: 1.6rem; }
+.news-index li { padding-block: .25rem; overflow-wrap: anywhere; }
+.news-index a { color: inherit; text-decoration: underline; text-underline-offset: .18em; }
+.news-item { scroll-margin-top: 5rem; }
+
+.settings-tabs .period-tab[aria-pressed="true"], .settings-tabs .period-tab[aria-pressed="true"]:hover { background: var(--accent-dark); color: #fff; border-color: var(--accent-dark); }
