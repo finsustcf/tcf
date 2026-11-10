@@ -513,7 +513,7 @@ input,select,textarea{max-width:100%}
 .news-bottom .detail-link span{margin:0;padding:0}
 .export-area,.export-buttons{min-width:0;max-width:100%}
 .feedback-launch{position:fixed;right:22px;bottom:22px;z-index:15;background:var(--paper);box-shadow:0 3px 12px #0001}
-#feedback-dialog{width:min(540px,calc(100vw - 28px));max-height:90vh;overflow:auto}
+#feedback-dialog{width:min(540px,calc(100vw - 28px));max-height:90dvh}
 .feedback-item,.incomplete-items{padding:18px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
 .feedback-message{white-space:pre-wrap}.feedback-item h4{font-size:18px}.danger-btn{color:#963b35;border-color:#ba8d87}
 .removed-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:start}.removed-copy{min-width:0;overflow-wrap:anywhere}
@@ -579,9 +579,6 @@ input,select,textarea{max-width:100%}
 .history-week-day:hover{border-color:var(--brand)}
 @media(max-width:570px){.history-date-form{grid-template-columns:1fr}.history-week-grid{gap:3px}.history-week-day{min-height:76px;padding:6px 1px}.history-week-day strong{font-size:11px}.history-week-day small{font-size:10px}.history-week-day span{font-size:11px}}
 
-/* R8: highlight the only day-level outcome requested by the admin. */
-.history-day-result { font-size: 1.18rem; font-weight: 700; line-height: 1.6; margin: 0.7rem 0 1rem; }
-
 /* R10: contain long URLs and keep controls usable at narrow widths. */
 .source-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
 .source-copy,.source-operations,.settings-section,.history-admin,.history-copy,.report-identity{min-width:0}
@@ -626,3 +623,39 @@ input,select,textarea{max-width:100%}
 .news-item { scroll-margin-top: 5rem; }
 
 .settings-tabs .period-tab[aria-pressed="true"], .settings-tabs .period-tab[aria-pressed="true"]:hover { background: var(--accent-dark); color: #fff; border-color: var(--accent-dark); }
+
+/* Shared date controls and dialog layout. */
+.settings-tabs .period-tab { transition: none; }
+.date-field { min-width: 0; }
+.date-form .date-field { flex: 1 1 12rem; }
+.date-form .date-field label { width: auto; }
+.date-input-row { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 6px; align-items: stretch; }
+.date-input-row input { width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+.date-input-row .date-open { width: 46px; min-height: 46px; padding: 0; }
+.date-input-row .date-open svg { width: 20px; height: 20px; }
+
+.dialog-shell[open] { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.dialog-toolbar { flex: none; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.dialog-toolbar .dialog-title { margin: 0; padding: 0; font-size: 1.2rem; overflow-wrap: anywhere; }
+.dialog-toolbar .dialog-close { position: static; flex: 0 0 44px; width: 44px; height: 44px; margin-inline-start: auto; }
+.dialog-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 32px 28px; }
+.detail-dialog > .dialog-scroll { padding: 0; }
+
+#calendar-dialog { width: min(420px, calc(100vw - 20px)); max-height: 92dvh; }
+.calendar-content { padding: 12px 16px 16px; }
+.calendar-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 40px; gap: 6px; align-items: stretch; }
+.calendar-nav .btn { padding: 0; min-height: 44px; font-size: 24px; }
+.calendar-nav select { min-width: 0; padding: 4px; font-size: 16px; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-block: 12px; }
+.calendar-weekday { text-align: center; color: var(--muted); font-size: 15px; }
+.calendar-day { min-height: 38px; min-width: 0; padding: 0; font-size: 16px; font-variant-numeric: tabular-nums; }
+.calendar-day[aria-pressed="true"] { color: #fff; background: var(--accent-dark); border-color: var(--accent-dark); }
+.calendar-day[aria-current="date"]:not([aria-pressed="true"]) { border-color: var(--accent-dark); font-weight: 700; }
+.calendar-actions { display: flex; justify-content: flex-end; }
+@media (max-width: 570px) {
+  .date-form .date-field { flex-basis: 100%; }
+  .dialog-scroll { padding-inline: 16px; }
+}
+/* R8: highlight the only day-level outcome requested by the admin. */
+.history-day-result { font-size: 1.18rem; font-weight: 700; line-height: 1.6; margin: 0.7rem 0 1rem; }
+

@@ -17,9 +17,118 @@
   };
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
   const FIRST_DATE='2025-12-29';
+
+  function dateField(id,name,label,value,required=true) {
+    return `<div class="field date-field"><label for="${id}">${label}</label><div class="date-input-row">
+      <input type="text" id="${id}" name="${name}" value="${esc(value)}" placeholder="YYYY-MM-DD"
+        autocomplete="off" maxlength="10" data-date-input ${required?'required':''}>
+      <button class="btn date-open" type="button" data-open-calendar="${id}" aria-haspopup="dialog" aria-label="選擇${label}">${icon('calendar')}</button>
+    </div></div>`;
+  }
+  function inDateRange(date) {
+    return U.validDate(date)&&date>=FIRST_DATE&&date<=U.today();
+  }
+  function validateDateField(input) {
+    const value=input.value;
+    input.setCustomValidity((!value&&!input.required)||inDateRange(value)?'':
+      `請輸入 ${FIRST_DATE} 至 ${U.today()} 的有效日期（YYYY-MM-DD）。`);
+    return input.checkValidity();
+  }
+  const calendarDialog=$('calendar-dialog');
+  let calendarInputId='', calendarMonth='', calendarParent=null;
+  function monthAfter(month,offset) {
+    const [year,number]=month.split('-').map(Number);
+    return new Date(Date.UTC(year,number-1+offset,1)).toISOString().slice(0,7);
+  }
+  function drawCalendar(focusSelector) {
+    const input=$(calendarInputId),today=U.today(),firstMonth=FIRST_DATE.slice(0,7),lastMonth=today.slice(0,7);
+    const first=calendarMonth+'-01',next=monthAfter(calendarMonth,1)+'-01';
+    const weekday=(new Date(first+'T00:00:00Z').getUTCDay()+6)%7;
+    const [year,month]=calendarMonth.split('-').map(Number);
+    const months=Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
+    const options=(values,selected,suffix)=>values.map(value=>`<option value="${value}" ${String(value)===selected?'selected':''}>${Number(value)} ${suffix}</option>`).join('');
+    const years=Array.from({length:Number(today.slice(0,4))-2025+1},(_,i)=>2025+i);
+    const monthOptions=months.filter(number=>year+'-'+number>=firstMonth&&year+'-'+number<=lastMonth);
+    const days=Array.from({length:weekday+Number(U.shift(next,-1).slice(-2))},(_,i)=>{
+      if(i<weekday)return '<span aria-hidden="true"></span>';
+      const date=U.shift(first,i-weekday);
+      if(date<FIRST_DATE||date>today)return '<span aria-hidden="true"></span>';
+      const selected=date===input?.value;
+      return `<button type="button" class="calendar-day" data-calendar-date="${date}" aria-label="${date}"
+        aria-pressed="${selected}" ${date===today?'aria-current="date"':''}>${Number(date.slice(-2))}</button>`;
+    }).join('');
+    calendarDialog.innerHTML=`<div class="dialog-toolbar"><h2 class="dialog-title" id="calendar-title">選擇日期</h2>
+      <button class="dialog-close" type="button" data-calendar-close aria-label="關閉行事曆">${icon('close')}</button></div>
+      <div class="dialog-scroll calendar-content">
+        <div class="calendar-nav">
+          <button class="btn" type="button" data-calendar-step="-1" aria-label="上個月" ${calendarMonth<=firstMonth?'disabled':''}>‹</button>
+          <select data-calendar-year aria-label="年份">${options(years,String(year),'年')}</select>
+          <select data-calendar-month aria-label="月份">${options(monthOptions,String(month).padStart(2,'0'),'月')}</select>
+          <button class="btn" type="button" data-calendar-step="1" aria-label="下個月" ${calendarMonth>=lastMonth?'disabled':''}>›</button>
+        </div>
+        <div class="calendar-grid" role="group" aria-label="${year} 年 ${month} 月，星期一開始">
+          ${['一','二','三','四','五','六','日'].map(day=>`<span class="calendar-weekday" aria-label="星期${day}">${day}</span>`).join('')}
+          ${days}
+        </div>
+        <div class="calendar-actions"><button class="btn" type="button" data-calendar-today>今天</button></div>
+      </div>`;
+    if(focusSelector){
+      const target=calendarDialog.querySelector(focusSelector+':not(:disabled)')||calendarDialog.querySelector('[data-calendar-date]');
+      target?.focus({preventScroll:true});
+    }
+  }
+  function openCalendar(input) {
+    const date=inDateRange(input.value)?input.value:U.today();
+    calendarInputId=input.id;calendarMonth=date.slice(0,7);calendarParent=input.closest('dialog');
+    drawCalendar();
+    calendarDialog.showModal();
+    calendarDialog.querySelector(`[data-calendar-date="${date}"]`)?.focus({preventScroll:true});
+  }
+  function chooseCalendarDate(date) {
+    const input=$(calendarInputId);
+    if(!input||!inDateRange(date))return;
+    calendarDialog.close();
+    input.value=date;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  calendarDialog.addEventListener('click',event=>{
+    const button=event.target.closest('button');
+    if(!button||button.disabled)return;
+    if(button.hasAttribute('data-calendar-close'))calendarDialog.close();
+    if(button.hasAttribute('data-calendar-today'))chooseCalendarDate(U.today());
+    if(button.dataset.calendarDate)chooseCalendarDate(button.dataset.calendarDate);
+    if(button.dataset.calendarStep){
+      const step=Number(button.dataset.calendarStep);
+      calendarMonth=monthAfter(calendarMonth,step);
+      drawCalendar(`[data-calendar-step="${step}"]`);
+    }
+  });
+  calendarDialog.addEventListener('change',event=>{
+    const target=event.target;
+    const year=calendarDialog.querySelector('[data-calendar-year]').value;
+    const month=calendarDialog.querySelector('[data-calendar-month]').value;
+    const selected=year+'-'+month;
+    calendarMonth=[FIRST_DATE.slice(0,7),selected,U.today().slice(0,7)].sort()[1];
+    drawCalendar(target.hasAttribute('data-calendar-year')?'[data-calendar-year]':'[data-calendar-month]');
+  });
+  calendarDialog.addEventListener('keydown',event=>{
+    const date=event.target.dataset.calendarDate;
+    const offset={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key];
+    if(!date||!offset)return;
+    event.preventDefault();
+    const next=U.shift(date,offset);
+    if(!inDateRange(next))return;
+    calendarMonth=next.slice(0,7);
+    drawCalendar(`[data-calendar-date="${next}"]`);
+  });
+  calendarDialog.addEventListener('close',()=>{
+    document.querySelector(`[data-open-calendar="${calendarInputId}"]`)?.focus({preventScroll:true});
+  });
+
   const state = { page: 'weekly', mode: 'current', ...U.bounds('current'), search: '', topic: '', region: '', type: '',
-    selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, feedbackBusy:false,feedbackRequestId:null,historyStatus:null,historyDate:'2026-01-01',historyEditingSource:null,dailyEditingSource:null,busy: false };
-  let historyPollTimer=null; let historyPollInFlight=false; let historyRequest=0; let historyResumeRetryAt=0; let timer, returnFocus, accountRequested = false, previousUID = null, previousAdmin = false;
+    selected: new Set(), limit: 8, customOpen: false, settingsTab: 'updates', knowledgeSearch: '', knowledgeTopic: '', focusIds: null, feedbackBusy:false,feedbackRequestId:null,historyStatus:null,historyDate:U.today(),historyEditingSource:null,dailyEditingSource:null,busy: false };
+  let historyPollTimer=null; let historyPollInFlight=false; let historyRequest=0; let historyResumeRetryAt=0; let timer, accountRequested = false, previousUID = null, previousAdmin = false;
 
   const newest = (a,b) => U.articleDay(b).localeCompare(U.articleDay(a))
     || String(b.publishedAt||'').localeCompare(String(a.publishedAt||'')) || a.id.localeCompare(b.id);
@@ -72,7 +181,7 @@
   }
 
   function renderDateForm() {
-    $('custom-period').innerHTML = state.customOpen ? `<form class="date-form" id="date-form"><label>開始日期<input name="from" type="date" value="${state.draftFrom||state.from}" min="${FIRST_DATE}" max="${U.today()}" required></label><label>結束日期<input name="to" type="date" value="${state.draftTo||state.to}" min="${FIRST_DATE}" max="${U.today()}" required></label><button class="btn apply-period" type="submit">套用期間</button><p class="date-error" id="date-error" role="alert"></p></form>` : '';
+    $('custom-period').innerHTML = state.customOpen ? `<form class="date-form" id="date-form">${dateField('custom-from','from','開始日期',state.draftFrom??U.today())}${dateField('custom-to','to','結束日期',state.draftTo??U.today())}<button class="btn apply-period" type="submit">套用期間</button><p class="date-error" id="date-error" role="alert"></p></form>` : '';
   }
   function renderHighlights() {
     const node=$('highlights'),items=periodItems();
@@ -156,7 +265,7 @@
   }
   function renderHistory() {
     $('main-content').innerHTML=`<div class="history-heading"><h1>歷史週報</h1></div>
-      <form class="date-form" id="history-week-form"><label>選擇該週任一天<input type="date" name="date" value="${esc(state.archiveDate||U.bounds('previous').from)}" min="${FIRST_DATE}" max="${U.bounds('previous').to}" required></label><button class="btn" type="submit">查看週報</button></form>`;
+      <form class="date-form" id="history-week-form">${dateField('archive-date','date','選擇該週任一天',state.archiveDate??U.today())}<button class="btn" type="submit">查看週報</button></form>`;
   }
   const knowledgeTopics=[...new Set([...D.topics,'其他'])];
   function renderKnowledge(){
@@ -172,7 +281,23 @@
     }).filter(x=>(!state.knowledgeTopic||x.topics.includes(state.knowledgeTopic))&&(!q||[x.view.term,x.view.abbreviation,x.view.translation,x.view.definition,...x.aliases||[]].some(v=>normalize(v).includes(q))));
     $('knowledge-list').innerHTML=(B().knowledgeError?`<p class="small-note" role="status">部分詞條無法更新：${esc(B().knowledgeError)}。已載入內容仍可查閱。</p>`:'')+(items.length?items.map(x=>`<article class="knowledge-term"><h2>${esc(x.view.term)}</h2><span class="abbr">${esc(x.view.abbreviation)}</span><span class="translation">${esc(x.view.translation)}</span><p>${esc(x.view.definition)}</p></article>`).join(''):'<div class="empty-state"><h2>沒有符合的詞條</h2><p>請調整關鍵字或主題。</p></div>');
   }
-  function showDialog(node) { returnFocus = document.activeElement; if (!node.open) node.showModal(); node.scrollTop = 0; }
+  const returnFocus=new WeakMap();
+  function wrapDialogContent(root) {
+    const closeButton=root.firstElementChild;
+    if(!closeButton?.classList.contains('dialog-close'))return;
+    const title=Array.from(root.children).find(node=>node.classList.contains('dialog-title'));
+    const toolbar=document.createElement('div'),content=document.createElement('div');
+    toolbar.className='dialog-toolbar';content.className='dialog-scroll';
+    if(title)toolbar.append(title);
+    toolbar.append(closeButton);
+    content.append(...root.childNodes);
+    root.append(toolbar,content);
+  }
+  function showDialog(node) {
+    wrapDialogContent(node);
+    if(!node.open){returnFocus.set(node,document.activeElement);node.showModal();}
+    node.querySelector('.dialog-scroll').scrollTop=0;
+  }
   function close(node) { node.close(); }
   function detail(id) {
     const item = B().articles.find(article => article.id === id); if (!item) return;
@@ -195,11 +320,11 @@
   }
   function articleForm(item) {
     const edit = !!item;
-    return `<form id="${edit ? 'edit' : 'article'}-form" class="stack-form" ${edit ? `data-id="${esc(item.id)}"` : ''}><label class="field">資訊標題<input name="title" required maxlength="180" value="${esc(item?.title || '')}"></label>${edit ? `<label class="field">重點摘要<textarea name="summary" required rows="6" maxlength="${D.summaryLimit}">${esc(item.summary)}</textarea></label><label class="field">值得關注<textarea name="implication" rows="4" maxlength="800">${esc(item.implication)}</textarea></label><label class="field">主要主題<select name="topic">${D.topics.map(topic => `<option ${item.topics?.[0] === topic ? 'selected' : ''}>${esc(topic)}</option>`).join('')}</select></label>${U.attachments(item).length?`<fieldset class="field"><legend>檢查本文附件（勾選要移除的錯誤連結）</legend><p class="small-note">只有你勾選的附件會移除；原文網址及新聞內容保留。</p>${U.attachments(item).map(file=>`<label class="field"><input type="checkbox" name="removeAttachment" value="${esc(file.url)}">移除：${esc(file.name)} <small>${esc(file.url)}</small></label>`).join('')}</fieldset>`:''}` : `<label class="field">原文網址<input name="url" type="url" required placeholder="https://" value="${esc(item?.url||'')}"></label><label class="field">來源名稱<input name="source" required maxlength="100"></label><div class="field-pair"><label class="field">類型<select name="type">${D.sourceTypes.map(type => `<option ${item?.type===type?'selected':''}>${esc(type==='同業公告'?'銀行同業':type)}</option>`).join('')}</select></label><label class="field">來源地區<select name="region"><option ${item?.region==='國內'?'selected':''}>國內</option><option ${item?.region==='國外'?'selected':''}>國外</option></select></label></div><label class="field">發布日期（選填）<input name="date" type="date" max="${U.today()}"></label><label class="field">公開文字（選填）<textarea name="manualText" rows="5" maxlength="18000" placeholder="原網站讀取受限時，可貼入同一網址的公開文字，至少100字。"></textarea></label>`}<p class="form-error" id="form-error" role="alert"></p><button class="btn btn-primary" ${state.busy ? 'disabled' : ''}>${state.busy ? '處理中…' : edit ? '儲存修改' : '擷取並整理'}</button></form>`;
+    return `<form id="${edit ? 'edit' : 'article'}-form" class="stack-form" ${edit ? `data-id="${esc(item.id)}"` : ''}><label class="field">資訊標題<input name="title" required maxlength="180" value="${esc(item?.title || '')}"></label>${edit ? `<label class="field">重點摘要<textarea name="summary" required rows="6" maxlength="${D.summaryLimit}">${esc(item.summary)}</textarea></label><label class="field">值得關注<textarea name="implication" rows="4" maxlength="800">${esc(item.implication)}</textarea></label><label class="field">主要主題<select name="topic">${D.topics.map(topic => `<option ${item.topics?.[0] === topic ? 'selected' : ''}>${esc(topic)}</option>`).join('')}</select></label>${U.attachments(item).length?`<fieldset class="field"><legend>檢查本文附件（勾選要移除的錯誤連結）</legend><p class="small-note">只有你勾選的附件會移除；原文網址及新聞內容保留。</p>${U.attachments(item).map(file=>`<label class="field"><input type="checkbox" name="removeAttachment" value="${esc(file.url)}">移除：${esc(file.name)} <small>${esc(file.url)}</small></label>`).join('')}</fieldset>`:''}` : `<label class="field">原文網址<input name="url" type="url" required placeholder="https://" value="${esc(item?.url||'')}"></label><label class="field">來源名稱<input name="source" required maxlength="100"></label><div class="field-pair"><label class="field">類型<select name="type">${D.sourceTypes.map(type => `<option ${item?.type===type?'selected':''}>${esc(type==='同業公告'?'銀行同業':type)}</option>`).join('')}</select></label><label class="field">來源地區<select name="region"><option ${item?.region==='國內'?'selected':''}>國內</option><option ${item?.region==='國外'?'selected':''}>國外</option></select></label></div>${dateField('publication-date','date','發布日期（選填）','',false)}<label class="field">公開文字（選填）<textarea name="manualText" rows="5" maxlength="18000" placeholder="原網站讀取受限時，可貼入同一網址的公開文字，至少100字。"></textarea></label>`}<p class="form-error" id="form-error" role="alert"></p><button class="btn btn-primary" ${state.busy ? 'disabled' : ''}>${state.busy ? '處理中…' : edit ? '儲存修改' : '擷取並整理'}</button></form>`;
   }
   // Reuse controls on background updates so focus, edits and open details survive.
   function updateDialogMarkup(dialog,html){
-    const template=document.createElement('template');template.innerHTML=html;
+    const template=document.createElement('template');template.innerHTML=html;wrapDialogContent(template.content);
     const key=node=>{
       if(node.nodeType!==1)return '';
       if(node.id)return node.id+'|'+(node.dataset.id||'');
@@ -269,7 +394,7 @@
 
   function settingsDialog(preserveView=true) {
     const priorDialog=$('settings-dialog');
-    const savedScroll=preserveView&&priorDialog.open?priorDialog.scrollTop:0;
+    const savedScroll=preserveView&&priorDialog.open?(priorDialog.querySelector('.dialog-scroll')?.scrollTop||0):0;
     if (!B().admin) return;
     const backend = B(), settings = backend.settings || {}, run = backend.lastRun;const week=backend.archives.find(x=>x.periodStart===U.bounds().from);const hasPoints=!!week?.insights?.insights?.length;
     const ready = !!backend.settings && (!D.requiresUpgrade || settings.version === 3);
@@ -294,7 +419,7 @@
       const countReady=weekDays.filter(d=>d.ready).length;
       content=`<section class="settings-section history-admin"><h3>歷史新聞回補</h3>
        
-       <form id="history-date-form" class="history-date-form stack-form"><label class="field">搜尋日期<input id="history-date" name="date" type="date" min="2025-12-29" max="${U.today()}" required value="${esc(state.historyDate)}"></label>
+       <form id="history-date-form" class="history-date-form stack-form">${dateField('history-date','date','搜尋日期',state.historyDate)}
        <button class="btn btn-primary" type="submit" ${disabledStart?'disabled':''}>${startLabel}</button></form>
        ${state.historyReadFailed?'<p role="alert">暫時無法讀取進度。 <button class="btn" data-action="retry-history-read">重新讀取</button></p>':''}
        ${state.historyLoading?`<p role="status" class="small-note">正在讀取 ${esc(state.historyDate)} 的回補進度…</p>`:''}
@@ -347,7 +472,7 @@
     }
     updateDialogMarkup(priorDialog,`<button class="dialog-close" data-action="close-settings" aria-label="關閉管理設定">${icon('close')}</button><h2 class="dialog-title" id="settings-title">管理設定</h2><div class="settings-tabs" role="group" aria-label="設定分類">${[['updates', '更新設定'], ['history', '歷史回補'], ['sources', '資訊來源'], ['add', '新增資訊'], ['removed', '已移除資訊'], ['feedback', '問題回報']].map(([tab, title]) => `<button class="period-tab ${state.settingsTab === tab ? 'active' : ''}" data-action="settings-tab" data-tab="${tab}" aria-pressed="${state.settingsTab === tab}">${title}</button>`).join('')}</div><p id="admin-action-status" role="status" aria-live="polite">${esc(actionMessage)}</p><div data-key="settings-${state.settingsTab}">${content}</div><div class="admin-footer"><span>${esc(backend.user?.email)}</span><button class="text-btn" data-action="logout">登出</button></div>`);
     if(!$('settings-dialog').open)showDialog($('settings-dialog'));
-    if(preserveView)priorDialog.scrollTop=savedScroll;
+    if(preserveView)priorDialog.querySelector('.dialog-scroll').scrollTop=savedScroll;
   }
   const commandTimers=new Map();
   function watchCommand(id){
@@ -396,7 +521,7 @@
   async function selectHistoryDate(date){
     if(!U.validDate(date)||date<FIRST_DATE||date>U.today())return;
     state.historyReadFailed=false;
-    const input=$('history-date');if(input&&input.value!==date)input.value=date;
+    const input=$('history-date');if(input){input.value=date;input.setCustomValidity('');}
     const week=state.historyStatus?.week;
     state.historyDate=date;state.historyStatus=week?.dayResults?.some(day=>day.date===date)?{week}:null;state.historyLoading=true;
     settingsDialog(true);
@@ -459,6 +584,8 @@
   }
   const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'skip-selected', 'more-pending', 'reload-pending', 'retry-history-read','clear-history-warning','clear-source-warning','clear-source-warnings','view-history-week', 'history-jump', 'history-skip-item', 'history-source-add', 'history-source-edit', 'history-source-cancel', 'history-source-toggle', 'history-source-remove', 'daily-source-edit', 'daily-source-remove']);
   document.addEventListener('click', async event => {
+    const opener=event.target.closest('[data-open-calendar]');
+    if(opener){const input=$(opener.dataset.openCalendar);if(input)openCalendar(input);return;}
     const button = event.target.closest('[data-action]'); if (!button||button.disabled) return;
     lastControl=button;
     event.preventDefault(); const action = button.dataset.action, id = button.dataset.id;
@@ -509,7 +636,7 @@
       case 'knowledge': state.page = 'knowledge'; frame(); if (!B().knowledgeLoaded) await window.PlatformBackend.loadKnowledge(); break;
       case 'reload-knowledge': await window.PlatformBackend.loadKnowledge(); break;
       case 'period':
-        if (button.dataset.mode === 'custom') { if(!state.customOpen){state.draftFrom=state.from;state.draftTo=state.to;}state.mode='custom';state.customOpen=true;state.selected.clear();frame(); }
+        if (button.dataset.mode === 'custom') { if(!state.customOpen){state.draftFrom=U.today();state.draftTo=U.today();}state.mode='custom';state.customOpen=true;state.selected.clear();frame(); }
         else await setPeriod(button.dataset.mode);
         break;
       case 'previous': await setPeriod('previous'); break;
@@ -558,6 +685,8 @@
     }
   });
   document.addEventListener('input', event => {
+    if(event.target.hasAttribute?.('data-date-input'))validateDateField(event.target);
+    if(event.target.id==='archive-date')state.archiveDate=event.target.value;
     if(event.target.closest?.('#date-form')&&['from','to'].includes(event.target.name)){state[event.target.name==='from'?'draftFrom':'draftTo']=event.target.value;return;}
     if(event.target.id==='knowledge-search'){state.knowledgeSearch=event.target.value;renderKnowledgeList();return;}
     if (event.target.id === 'search-input') { state.search = event.target.value; state.focusIds = null; state.selected.clear(); state.limit = 8; renderList(); }
@@ -566,7 +695,7 @@
     const target = event.target;
     if(target.dataset.warningChoice){const id=target.dataset.warningChoice;if(target.checked)warningSelection.add(id);else warningSelection.delete(id);return;}
     if(target.dataset.pendingChoice){const id=target.dataset.pendingChoice;if(target.checked)pendingSelection.add(id);else pendingSelection.delete(id);settingsDialog(true);return;}
-    if(target.id==='history-date'){const date=target.value;await selectHistoryDate(date);return;}
+    if(target.id==='history-date'){if(target.reportValidity())await selectHistoryDate(target.value);return;}
     if(target.id==='knowledge-topic'){state.knowledgeTopic=target.value;renderKnowledgeList();return;}
     if (target.id === 'topic-filter' || target.id === 'region-filter' || target.id==='type-filter') {
       state[{'topic-filter':'topic','region-filter':'region','type-filter':'type'}[target.id]] = target.value; state.focusIds = null;
@@ -583,11 +712,16 @@
     lastControl=event.submitter||form.querySelector('button[type=submit]');
     if (!['filter-form', 'knowledge-filter', 'date-form', 'source-form', 'article-form', 'edit-form', 'feedback-form', 'history-week-form', 'history-date-form', 'history-source-form'].includes(id)) return;
     event.preventDefault(); if (id === 'filter-form' || id==='knowledge-filter') return;
+    for(const input of form.querySelectorAll('[data-date-input]')){
+      if(!validateDateField(input)){input.reportValidity();return;}
+    }
     const values = Object.fromEntries(new FormData(form));
     if(id==='history-week-form'){
-      const date=values.date;if(!U.validDate(date)||date<FIRST_DATE||date>U.bounds('previous').to)return;
+      const date=values.date;
       const monday=U.shift(date,-((new Date(date+'T00:00:00Z').getUTCDay()+6)%7));state.archiveDate=date;
-      await setPeriod('archive',monday,U.shift(monday,6));return;
+      if(monday===U.bounds('current').from)await setPeriod('current');
+      else await setPeriod('archive',monday,U.shift(monday,6));
+      return;
     }
     if (id === 'date-form') {
       if (!U.validDate(values.from) || !U.validDate(values.to) || values.from<FIRST_DATE || values.from > values.to || values.to > U.today()) { $('date-error').textContent = '請選擇 2025-12-29 至今天的日期，結束日不可早於開始日。'; return; }
@@ -625,7 +759,13 @@
     }
 
   });
-  ['detail-dialog', 'settings-dialog', 'feedback-dialog'].forEach(id => $(id).addEventListener('close', () => returnFocus?.focus?.()));
+  ['detail-dialog','settings-dialog','feedback-dialog'].forEach(id=>{
+    const dialog=$(id);
+    dialog.addEventListener('close',()=>{
+      if(calendarDialog.open&&calendarParent===dialog)calendarDialog.close();
+      if(!document.querySelector('dialog[open]'))returnFocus.get(dialog)?.focus({preventScroll:true});
+    });
+  });
   window.PlatformBackend.onState(() => {
     const focused = document.activeElement?.id, selection = document.activeElement?.selectionStart;
     const allowed = new Set(filtered().map(item => item.id));
