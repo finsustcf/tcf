@@ -392,6 +392,62 @@
     ${backend.pendingLoading?'<p class="small-note" role="status">正在更新狀態…</p>':''}</section>`;
   }
 
+  const historyIssueLabels={
+    'source-rate-limit':'來源限流（HTTP 429）','source-timeout':'來源回應逾時','source-http':'來源網站回應錯誤',
+    'url-resolution':'網址解析','source-redirect':'網址轉址','source-format':'回應格式','source-empty':'空回應',
+    'date-unverified':'日期未驗證','gemini-rate-limit':'Gemini 限流','gemini-service':'Gemini 服務',
+    'worker-interrupted':'背景工作接續','worker-busy':'背景工作忙碌','article-processing':'文章處理',
+    'article-queue':'文章排隊','source-config':'來源設定','worker-status':'背景工作',
+  };
+  let historyIssueRequest=0,historyIssues={date:'',rows:null,loading:false,error:''},historyIssueLimit=40;
+  const historyIssuePanel=()=>$('settings-dialog').querySelector('[data-history-issues]');
+  function historyIssueDetails(){
+    const {rows,loading,error}=historyIssues.date===state.historyDate?historyIssues:{};
+    return `<details class="status-details history-issues" data-history-issues data-key="history-issues-${esc(state.historyDate)}">
+      <summary>錯誤紀錄</summary>
+      ${loading?'<p class="small-note" role="status">讀取錯誤紀錄中…</p>':''}
+      ${error?`<p class="form-error" role="alert">${esc(error)} <button type="button" class="btn" data-action="reload-history-issues">重新讀取</button></p>`:''}
+      ${rows?.length?`<div class="settings-actions"><button type="button" class="btn" data-action="clear-history-issues">清除本日全部錯誤紀錄</button></div>
+      <div class="status-detail-list">${rows.slice(0,historyIssueLimit).map(row=>`<article class="pending-row" data-key="history-issue-${esc(row.key)}">
+        <div><h4>${esc(row.name)} · ${esc(historyIssueLabels[row.code]||'來源問題')}</h4>
+        <p class="small-note">${esc([row.stage,row.host,row.title].filter(Boolean).join(' · '))}</p>
+        <p>${esc(row.reason)}</p></div>
+        <button type="button" class="btn" data-action="clear-history-issue" data-id="${esc(row.key)}" data-occurrence="${esc(row.occurrence)}">清除此筆</button>
+      </article>`).join('')}</div>
+      ${rows.length>historyIssueLimit?`<button type="button" class="btn" data-action="more-history-issues">顯示更多錯誤紀錄（${rows.length-historyIssueLimit} 筆）</button>`:''}`:rows&&!error&&!loading?'<p class="small-note">目前沒有未清除的錯誤紀錄。</p>':''}
+    </details>`;
+  }
+  async function readHistoryIssues(){
+    if(!B().admin||state.settingsTab!=='history'||!$('settings-dialog').open||!historyIssuePanel()?.open)return;
+    const date=state.historyDate,request=++historyIssueRequest;
+    const previous=historyIssues.date===date?historyIssues.rows:null;
+    historyIssues={date,rows:previous,loading:!previous,error:''};
+    if(!previous)settingsDialog(true);
+    try{
+      const result=await window.PlatformBackend.call(D.functions.backfill,{operation:'issues',date},{timeout:20000});
+      if(request!==historyIssueRequest||date!==state.historyDate)return;
+      historyIssues={date,rows:result.issues||[],loading:false,error:''};
+    }catch(error){
+      if(request!==historyIssueRequest||date!==state.historyDate)return;
+      historyIssues={date,rows:previous,loading:false,error:'暫時無法讀取錯誤紀錄。'};
+    }
+    if(B().admin&&$('settings-dialog').open&&state.settingsTab==='history')settingsDialog(true);
+  }
+  async function clearHistoryIssues(button,all){
+    const date=state.historyDate,key=button.dataset.id,occurrence=button.dataset.occurrence;
+    return withControl('clear-history-issues:'+date,async version=>{
+      ++historyIssueRequest;
+      const result=await window.PlatformBackend.call(D.functions.backfill,all?{operation:'clear-issues',date}:{operation:'clear-issue',date,key,occurrence});
+      if(date!==state.historyDate||!B().admin||!$('settings-dialog').open||state.settingsTab!=='history')return;
+      operationMessage(result.cleared?'已清除錯誤紀錄。':'這筆紀錄已更新。',version);
+      const restoreFocus=document.activeElement===button;
+      await readHistoryIssues();
+      if(restoreFocus&&!button.isConnected)historyIssuePanel()?.querySelector('summary')?.focus({preventScroll:true});
+    });
+  }
+  document.addEventListener('toggle',event=>{
+    if(event.target===historyIssuePanel()&&event.target.open)readHistoryIssues();
+  },true);
   function settingsDialog(preserveView=true) {
     const priorDialog=$('settings-dialog');
     const savedScroll=preserveView&&priorDialog.open?(priorDialog.querySelector('.dialog-scroll')?.scrollTop||0):0;
@@ -405,15 +461,15 @@
     let content;
     if (state.settingsTab === 'history') {
       const hist=state.historyStatus||{},job=hist.job,week=hist.week;
-      const labels={queued:'準備搜尋',running:'搜尋中',complete:'已完成',partial:'等待接續',failed:'暫時無法完成'};
-      // A queued job waiting for Eventarc is not necessarily a failed search.
-      // The browser can safely advance queued or expired-lease jobs while open.
       const running=job&&['queued','running'].includes(job.status);
       const waiting=job?.status==='partial'&&job.retryAfterMs>0;
-      const needsRetry=job&&(['partial','failed'].includes(job.status)||job.needsRefresh===true);
-      const percent=job?.sourceCount?Math.min(100,Math.max(0,Math.round((Number(job.checked)||0)/job.sourceCount*100))):0;
-      const stage=job?.phase==='analyze'?'正在分析並收錄新聞':'正在搜尋當天新聞';
-      const startLabel=state.busy?'正在送出…':waiting?'等待服務恢復':job?.status==='partial'&&job.phase==='analyze'?'接續處理':!job?'搜尋這一天':running?'搜尋中…':job.sourceWarningCount?'補查這一天':job.canRetryEmpty?'再搜尋這一天':job.status==='complete'&&!job.needsRefresh?'已完成':job.needsRefresh?'依新版搜尋這一天':'重新搜尋';
+      const waitLabel={
+        'source-rate-limit':'等待來源限流解除','source-retry':'等待來源重試','source-timeout':'等待來源重試',
+        'gemini-rate-limit':'等待 Gemini 限流解除','gemini-service':'等待 Gemini 恢復','daily':'等待每日更新',
+      }[job?.retryKind]||'等待背景接續';
+      const startLabel=state.busy?'正在送出…':waiting?waitLabel:running?(job.stale?'等待背景接續':job.phase==='analyze'?'分析中…':'搜尋中…'):
+        !job?'搜尋這一天':job.status==='partial'?'接續處理':job.sourceWarningCount?'補查這一天':
+        job.canRetryEmpty?'再搜尋這一天':job.needsRefresh?'依新版搜尋這一天':job.status==='complete'?'已完成':'重新搜尋';
       const disabledStart=state.historyLoading||state.historyReadFailed||state.busy||running||waiting||(job?.status==='complete'&&!job.needsRefresh&&!job.canRetryEmpty);
       const weekDays=week?.dayResults||week?.days?.map(d=>({date:d,ready:!(week.missing||[]).includes(d),status:'not-started'}))||[];
       const countReady=weekDays.filter(d=>d.ready).length;
@@ -423,19 +479,12 @@
        <button class="btn btn-primary" type="submit" ${disabledStart?'disabled':''}>${startLabel}</button></form>
        ${state.historyReadFailed?'<p role="alert">暫時無法讀取進度。 <button class="btn" data-action="retry-history-read">重新讀取</button></p>':''}
        ${state.historyLoading?`<p role="status" class="small-note">正在讀取 ${esc(state.historyDate)} 的回補進度…</p>`:''}
-       ${job?`<div class="run-status" data-key="history-day-result" role="status" aria-live="polite"><h3>${esc(state.historyDate)}</h3>
-       <p class="history-day-result">${Number(job.dayArticleCount)>0?`當天已收錄 ${Number(job.dayArticleCount)} 篇相關新聞`:running||job.stale?'正在搜尋，尚未收錄新聞':job.status==='complete'?(job.sourceWarningCount?'已收錄 0 篇・可補查':'本次沒有抓到相關新聞'):`目前尚未抓到，搜尋${job.status==='failed'?'遇到問題':'尚未完成'}`}</p>
-       ${running?`<p>${esc(stage)}・已搜尋 ${Number(job.checked)||0}／${Number(job.sourceCount)||0} 個來源</p>`:''}
-       <div class="history-progress"><span style="width:${percent}%"></span></div>
-       ${!running&&Number(job.dayArticleCount)>0?'<p class="small-note">以上包含原本每日或週報已收錄的新聞，不重複計算。</p>':''}
-       ${!running&&!job.sourceWarningCount&&Number(job.dayArticleCount)===0&&job.status==='complete'?'<p class="small-note">本次未找到符合條件的新聞，不代表當天絕對沒有新聞；可以按「再搜尋這一天」。</p>':''}
-       ${job.stale?'<p class="small-note">正在嘗試接續未完成的工作，背景排程會嘗試接續。</p>':''}
-       ${job.lastError&&['failed','partial'].includes(job.status)?`<p class="small-note">有來源或分析未完成，仍可稍後重新搜尋。</p>`:''}
-       ${waiting?`<p class="small-note">服務或分析額度暫時受限，已保留進度。約 ${Math.max(1,Math.ceil(job.retryAfterMs/60000))} 分鐘後可接續；背景排程會嘗試接續。</p>`:''}
-       ${job.sourceWarnings?.length?`<details class="status-details"><summary>來源問題（${Number(job.sourceWarningCount)||job.sourceWarnings.length} 個）</summary>${job.sourceWarnings.map(x=>`<p class="small-note">${esc(x.name)}：${esc(x.kind==='coverage'?'日期未驗證':x.message)}</p>`).join('')}<button class="btn" data-action="clear-history-warning">清除失敗提示</button></details>`:''}
-       ${job.needsRefresh?'<p class="small-note">來源有更新，可重新搜尋這一天。</p>':''}
-       ${job.items?.some(x=>x.status==='pending'&&['partial','failed'].includes(job.status))?`<details><summary>處理無法完成的文章（選用）</summary>${job.items.filter(x=>x.status==='pending').map(x=>`<p>${esc(x.title)} <button type="button" class="btn history-skip-item" data-action="history-skip-item" data-id="${esc(x.id)}">略過</button></p>`).join('')}</details>`:''}
-       </div>`:''}
+       ${job?`<div class="run-status" data-key="history-day-result"><h3>${esc(state.historyDate)}</h3>
+       <p class="history-day-counts" role="status" aria-live="polite"><span>收錄 ${Number(job.dayArticleCount)||0} 篇</span><span>待處理 ${Number(job.pendingCount)||0} 篇</span><span>來源問題 ${Number(job.sourceIssueCount??job.sourceWarningCount)||0} 筆</span></p>
+       ${(job.hasUnverifiedSources??Number(job.sourceWarningCount)>0)?'<p class="small-note">部分來源未驗證</p>':''}
+       ${historyIssueDetails()}
+       </div>
+       ${job.items?.some(x=>x.status==='pending'&&['partial','failed'].includes(job.status))?`<details class="status-details" data-key="history-pending-${esc(state.historyDate)}"><summary>待處理文章</summary>${job.items.filter(x=>x.status==='pending').map(x=>`<p>${esc(x.title)} <button type="button" class="btn history-skip-item" data-action="history-skip-item" data-id="${esc(x.id)}">略過</button></p>`).join('')}</details>`:''}`:''}
        <div class="run-status history-week" data-key="history-week-result"><h3>歷史週報</h3>${historyDayPicker(week)}${weekSearchNote(week)}
        ${week?`<button class="btn" data-action="view-history-week" data-date="${esc(week.monday)}">查看這一週</button>`:''}</div>
       </section>`;
@@ -500,7 +549,7 @@
     return withControl(JSON.stringify([payload.operation,payload.id,payload.date,payload.itemId,payload.periodStart]),async version=>{
       const result=await window.PlatformBackend.call(D.functions.backfill,payload);
       if(result.accepted&&result.id){watchCommand(result.id);operationMessage('工作已接收，正在背景處理。',version);}
-      else operationMessage(typeof success==='function'?success(result):success,version);
+      else operationMessage(result.waiting?'進度已保留，將依原定時間接續。':typeof success==='function'?success(result):success,version);
       pollHistory(true);
       return result;
     });
@@ -518,11 +567,15 @@
       window.PlatformBackend.loadPending().catch(error=>operationMessage(error.message,version));
     });
   }
-  async function selectHistoryDate(date){
+  async function selectHistoryDate(date,{reload=false}={}){
     if(!U.validDate(date)||date<FIRST_DATE||date>U.today())return;
+    // A typed date can emit the same change again on blur. Do not replace
+    // the results or interrupt a click while the same date is already loaded.
+    if(!reload&&date===state.historyDate&&!state.historyReadFailed&&(state.historyLoading||state.historyStatus))return;
     state.historyReadFailed=false;
     const input=$('history-date');if(input){input.value=date;input.setCustomValidity('');}
     const week=state.historyStatus?.week;
+    ++historyIssueRequest;historyIssues={date,rows:null,loading:false,error:''};historyIssueLimit=40;
     state.historyDate=date;state.historyStatus=week?.dayResults?.some(day=>day.date===date)?{week}:null;state.historyLoading=true;
     settingsDialog(true);
     await pollHistory(true);
@@ -530,16 +583,17 @@
   async function pollHistory(force=false){
     if((historyPollInFlight&&!force)||!B().admin||!$('settings-dialog').open||!['history','sources'].includes(state.settingsTab)||(state.busy&&!force))return;
     const tab=state.settingsTab, job=state.historyStatus?.job;
-    if(!force&&(document.hidden||tab!=='history'||!job||!(['queued','running'].includes(job.status)||(job.status==='partial'&&job.retryAfterMs>0))))return;
+    if(!force&&(document.hidden||tab!=='history'||!job||!['queued','running','partial'].includes(job.status)))return;
     historyPollInFlight=true;const request=++historyRequest,date=state.historyDate;
     try{
-      // Read progress only. R11 Eventarc and the scheduled worker own processing.
-      const result=await window.PlatformBackend.call(D.functions.historyStatus,{date,includeSources:tab==='sources',sourcesOnly:tab==='sources'},{timeout:20000});
+      // Read-only. Dispatch and recovery stay in the background.
+      const result=await window.PlatformBackend.call(D.functions.historyStatus,{date,includeSources:tab==='sources',sourcesOnly:tab==='sources',compact:true},{timeout:20000});
       if(request!==historyRequest||date!==state.historyDate)return;
       if(!B().admin||!$('settings-dialog').open||state.settingsTab!==tab)return;
       if(tab==='sources')state.historySources=result.sources||[];
       else {state.historyStatus=result;state.historyLoading=false;state.historyReadFailed=false;}
       if($('settings-dialog').open&&state.settingsTab===tab)settingsDialog(true);
+      if(tab==='history'&&historyIssuePanel()?.open&&job?.issueRevision!==result.job?.issueRevision)readHistoryIssues();
     }catch(error){
       if(request!==historyRequest||!B().admin||!$('settings-dialog').open||state.settingsTab!==tab)return;
       if(tab==='history'){state.historyLoading=false;state.historyReadFailed=true;}
@@ -582,7 +636,7 @@
     catch(e){$('feedback-error').textContent=e.message;}
     finally{state.feedbackBusy=false;submit.disabled=false;submit.textContent='送出回報';}
   }
-  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'skip-selected', 'more-pending', 'reload-pending', 'retry-history-read','clear-history-warning','clear-source-warning','clear-source-warnings','view-history-week', 'history-jump', 'history-skip-item', 'history-source-add', 'history-source-edit', 'history-source-cancel', 'history-source-toggle', 'history-source-remove', 'daily-source-edit', 'daily-source-remove']);
+  const adminActions = new Set(['settings-tab', 'initialize', 'collect', 'build-weekly', 'toggle-pipeline', 'toggle-source', 'edit', 'hide', 'restore', 'reload-removed', 'more-removed', 'permanent-delete', 'reload-feedback', 'skip-pending', 'skip-selected', 'more-pending', 'reload-pending', 'retry-history-read','clear-history-issue','clear-history-issues','reload-history-issues','more-history-issues','clear-source-warning','clear-source-warnings','view-history-week', 'history-jump', 'history-skip-item', 'history-source-add', 'history-source-edit', 'history-source-cancel', 'history-source-toggle', 'history-source-remove', 'daily-source-edit', 'daily-source-remove']);
   document.addEventListener('click', async event => {
     const opener=event.target.closest('[data-open-calendar]');
     if(opener){const input=$(opener.dataset.openCalendar);if(input)openCalendar(input);return;}
@@ -592,8 +646,11 @@
     if (adminActions.has(action) && (!B().admin || (state.busy&&!['settings-tab','history-jump'].includes(action)))) return;
     switch (action) {
       case 'jump-article': jumpArticle(id);break;
-      case 'retry-history-read': await selectHistoryDate(state.historyDate);break;
-      case 'clear-history-warning': await historyTask({operation:'clear-warning',date:state.historyDate},'已清除失敗提示。');break;
+      case 'retry-history-read': await selectHistoryDate(state.historyDate,{reload:true});break;
+      case 'reload-history-issues': await readHistoryIssues();break;
+      case 'more-history-issues': historyIssueLimit+=40;settingsDialog(true);break;
+      case 'clear-history-issue':
+      case 'clear-history-issues': await clearHistoryIssues(button,action==='clear-history-issues');break;
       case 'clear-source-warning':
       case 'clear-source-warnings': {
         const ids=action==='clear-source-warning'?[id]:[...warningSelection];
@@ -649,7 +706,7 @@
       case 'clear-selection': state.selected.clear(); renderList(); break;
       case 'reload': await window.PlatformBackend.refresh(); break;
       case 'account': account(); break;
-      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='history'){await selectHistoryDate(state.historyDate);}else if(state.settingsTab==='sources'){await pollHistory(true);} if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
+      case 'settings-tab': state.settingsTab = button.dataset.tab; settingsDialog(); if(state.settingsTab==='history'){await selectHistoryDate(state.historyDate,{reload:true});}else if(state.settingsTab==='sources'){await pollHistory(true);} if(state.settingsTab==='feedback')await window.PlatformBackend.loadFeedback(); if (state.settingsTab === 'removed') await window.PlatformBackend.loadRemoved(); break;
       case 'reload-removed': await window.PlatformBackend.loadRemoved(); break;
       case 'more-removed': await window.PlatformBackend.loadRemoved({ more: true }); break;
       case 'restore': if ((B().removed || []).some(item => item.id === id)) await task('visibility', { id, published: true }, '資訊已還原，可切換至原發布日期查看。'); break;
@@ -773,7 +830,7 @@
     if (focused) { const element = $(focused); if (element) { element.focus({ preventScroll: true }); if (typeof selection === 'number' && element.setSelectionRange) try { element.setSelectionRange(selection, selection); } catch {} } }
     if ((previousUID && previousUID !== B().user?.uid) || (previousAdmin && !B().admin)) {
       for(const interval of commandTimers.values())clearInterval(interval);commandTimers.clear();
-      pendingSelection.clear();warningSelection.clear();state.historySources=null;state.historyStatus=null;state.publicWeek=null;state.historyLoading=false;state.historyReadFailed=false;++historyRequest;historyPollInFlight=false;
+      pendingSelection.clear();warningSelection.clear();state.historySources=null;state.historyStatus=null;state.publicWeek=null;state.historyLoading=false;state.historyReadFailed=false;++historyRequest;historyPollInFlight=false;++historyIssueRequest;historyIssues={date:'',rows:null,loading:false,error:''};
       if ($('settings-dialog').open) $('settings-dialog').close();
       if ($('detail-dialog').open) $('detail-dialog').close();
     }
