@@ -510,7 +510,7 @@
         ${backend.removedLoading ? '<p class="loading" role="status">讀取已移除資訊中…</p>' : ''}
         ${backend.removedHasMore ? `<button class="btn" data-action="more-removed" ${backend.removedLoading || state.busy ? 'disabled' : ''}>載入更多已移除資訊</button>` : ''}</section>`;
     } else if (state.settingsTab === 'add') {
-      content = articleForm();
+      content = articleForm() + '<p><a class="btn" href="./html-draft.html" target="_blank" rel="noopener">開啟 HTML 草稿（另開分頁）</a></p>';
     } else {
       content = `<section class="settings-section"><div class="schedule-row"><span>資訊蒐集</span><strong>每天 08:00、12:00、16:00</strong></div><div class="schedule-row"><span>上週週報整理</span><strong>週一 00:00 啟動</strong></div><div class="pipeline-state"><span class="status-dot ${settings.enabled ? 'enabled' : ''}"></span>自動更新${settings.enabled ? '已開啟' : '尚未開啟'}</div>
         <div class="settings-actions">${!ready ? `<button class="btn btn-primary" data-action="initialize" ${state.busy ? 'disabled' : ''}>啟用平台與預設來源</button>` : `<button class="btn ${settings.enabled?'action-stop':'action-start'}" data-action="toggle-pipeline" ${state.busy ? 'disabled' : ''}>${settings.enabled ? '暫停自動更新' : '開啟自動更新'}</button><button class="btn" data-action="collect" ${state.busy ? 'disabled' : ''}>${state.busy ? '處理中…' : '立即更新'}</button><button class="btn" data-action="build-weekly" ${state.busy ? 'disabled' : ''}>重新彙整上週週報</button>`}</div>

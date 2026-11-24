@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTML 草稿</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f4ee;color:#282d28;font:16px/1.65 system-ui,sans-serif}main{max-width:1080px;margin:auto;padding:clamp(18px,4vw,52px)}h1{font:600 clamp(32px,5vw,52px)/1.2 Georgia,serif;margin:0}p{margin:12px 0 24px}section{background:white;padding:clamp(14px,3vw,28px);border:1px solid #cccabe;border-radius:12px}header,footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}textarea{width:100%;height:54vh;min-height:240px;margin:12px 0;resize:vertical;font:15px/1.6 ui-monospace,monospace;background:#fbfbf8;color:#222d27;border:1px solid #aaa;padding:16px;tab-size:4}button,input{font:inherit;border-radius:5px;padding:7px 12px}input{border:1px solid #aaa;max-width:100%}button{background:#275d49;color:white;border:0;cursor:pointer}button:disabled{background:#727b76}output{font-variant-numeric:tabular-nums}
+</style>
+<main><h1>HTML 草稿</h1><p>貼入完整程式碼，下載到這台電腦。關閉頁面前請先下載。</p>
+<section><header><label for="code"><strong>HTML 原始碼</strong></label><output id="stats">0 行 · 0 KiB</output></header>
+<textarea id="code" wrap="off" spellcheck="false" autocomplete="off" placeholder="在這裡貼上 HTML"></textarea>
+<footer><label>檔名 <input id="filename" value="index.html"></label><button id="save" disabled>下載 HTML</button></footer></section></main>
+<script>
+const code = document.querySelector('#code');
+const save = document.querySelector('#save');
+const stats = document.querySelector('#stats');
+let timer;
+function updateStats() {
+  const value = code.value;
+  let lines = value.length ? 1 : 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) === 10) lines++;
+  }
+  stats.textContent = lines.toLocaleString() + ' 行 · ' + (new Blob([value]).size / 1024).toFixed(1) + ' KiB';
+}
+code.addEventListener('input', () => {
+  save.disabled = !code.value.length;
+  clearTimeout(timer);
+  timer = setTimeout(updateStats, 150);
+});
+save.addEventListener('click', () => {
+  const name = document.querySelector('#filename').value.trim() || 'index.html';
+  const link = document.createElement('a');
+  link.download = /\.html?$/i.test(name) ? name : name + '.html';
+  const url = URL.createObjectURL(new Blob([code.value], {type:'text/html;charset=utf-8'}));
+  link.href = url;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+});
+</script></html>
